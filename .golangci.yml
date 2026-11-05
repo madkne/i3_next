@@ -1,0 +1,59 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  default: standard
+  enable:
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - errcheck
+    - misspell
+    - unconvert
+    - unparam
+    - revive
+    - gocritic
+    - bodyclose
+    - noctx
+    - gosec
+  settings:
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - i3_next
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

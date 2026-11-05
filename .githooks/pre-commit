@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-commit checks..."
+
+# Go formatting
+if [ -n "$(gofmt -l .)" ]; then
+    echo "gofmt: files need formatting:"
+    gofmt -l .
+    exit 1
+fi
+
+# Go vet
+go vet ./...
+
+# Lint
+if command -v golangci-lint >/dev/null 2>&1; then
+    golangci-lint run ./...
+else
+    echo "golangci-lint not found; skipping"
+fi
+
+# Static analysis
+if command -v staticcheck >/dev/null 2>&1; then
+    staticcheck ./...
+else
+    echo "staticcheck not found; skipping"
+fi
+
+# Shell scripts
+if command -v shellcheck >/dev/null 2>&1; then
+    find . -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
+else
+    echo "shellcheck not found; skipping"
+fi
+
+echo "Pre-commit checks passed."

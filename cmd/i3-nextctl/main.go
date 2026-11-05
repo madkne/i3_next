@@ -11,7 +11,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("i3-nextctl %s (%s)\n", VERSION, commit)
+		fmt.Printf("i3-nextctl %s (%s, %s)\n", VERSION, commit, buildDate)
 		return
 	}
 

@@ -21,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("i3_next %s (%s)\n", VERSION, commit)
+		fmt.Printf("i3_next %s (%s, %s)\n", VERSION, commit, buildDate)
 		return
 	}
 
@@ -32,20 +32,22 @@ func main() {
 		os.Interrupt,
 		syscall.SIGTERM,
 	)
-	defer stop()
 
 	app, err := bootstrap.New(logger)
 	if err != nil {
 		logger.Error("failed to initialize application",
 			slog.Any("error", err))
+		stop()
 		os.Exit(1)
 	}
 
 	if err := app.Run(ctx); err != nil {
 		logger.Error("application stopped with error",
 			slog.Any("error", err))
+		stop()
 		os.Exit(1)
 	}
 
+	stop()
 	logger.Info("i3_next stopped successfully")
 }

@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 -include tests/vm/vm.mk
 
-.PHONY: all build test vet fmt clean run check
+.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint clean run check
 
 all: check build
 
@@ -23,10 +23,27 @@ fmt:
 vet:
 	$(GO) vet ./...
 
+fmt-check:
+	@test -z "$$($(GO)fmt -l .)" || { echo "gofmt: files need formatting:"; $(GO)fmt -l .; exit 1; }
+
+lint:
+	golangci-lint run ./...
+
+staticcheck:
+	staticcheck ./...
+
+shellcheck:
+	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not installed; skipping"; exit 0; }
+	@find . -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
+
+qmllint:
+	@command -v qmllint >/dev/null 2>&1 || { echo "qmllint not installed; skipping"; exit 0; }
+	@find ui -type f -name '*.qml' -print0 | xargs -0 -r qmllint
+
 test:
 	$(GO) test -race ./...
 
-check: fmt vet test
+check: fmt-check vet lint staticcheck test
 
 build:
 	@mkdir -p $(BUILD_DIR)
