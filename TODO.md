@@ -36,8 +36,8 @@
 
 ### بازگشایی/اصلاحات فوری (Quick wins --- همه P0 مگر ذکر شود)
 
-- [ ] **FIX-01** `make` بدون آرگومان به‌جای `all`، `vm-doctor` را اجرا می‌کند (چون `-include tests/vm/vm.mk` قبل از `all` آمده). ✅ `.DEFAULT_GOAL := all` اضافه شود و تست شود که `make -n` هدف `all` را انتخاب می‌کند. همچنین `$(GO)fmt` با `GOFMT := gofmt` جایگزین شود.
-- [ ] **FIX-02** `lib.sh` در ریشهٔ مخزن است ولی `tests/e2e/run.sh` آن را از `tests/e2e/lib.sh` source می‌کند. ✅ فایل به `tests/e2e/lib.sh` منتقل شود؛ `make vm-test` بدون خطای source اجرا شود.
+- [x] **FIX-01** `make` بدون آرگومان به‌جای `all`، `vm-doctor` را اجرا می‌کند (چون `-include tests/vm/vm.mk` قبل از `all` آمده). ✅ `.DEFAULT_GOAL := all` اضافه شود و تست شود که `make -n` هدف `all` را انتخاب می‌کند. همچنین `$(GO)fmt` با `GOFMT := gofmt` جایگزین شود.
+- [x] **FIX-02** `lib.sh` در ریشهٔ مخزن است ولی `tests/e2e/run.sh` آن را از `tests/e2e/lib.sh` source می‌کند. ✅ فایل به `tests/e2e/lib.sh` منتقل شود؛ `make vm-test` بدون خطای source اجرا شود.
 - [ ] **FIX-03** `configs/sway/config` فایل‌های `$HOME/.config/i3-next/sway/*` را include می‌کند که هیچ مرحله‌ای نصب نمی‌کند و keybindingها به دستورات ناموجود (`i3-nextctl launcher`, `i3-nextctl session logout`) اشاره می‌کنند. ✅
   - مسیر include نسبی به فایل config (یا نصب در `~/.config/i3-next/sway/`) شود و در e2e `sway --validate` روی مسیر نصب‌شده پاس شود.
   - تا پیاده‌سازی دستورات، bindهای ناموجود موقتاً به `exec foot`/`swaymsg exit` تغییر کنند یا کامنت شوند.

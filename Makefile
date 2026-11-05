@@ -4,12 +4,16 @@ BUILD_DIR := build
 
 GO := go
 
+GOFMT := gofmt
+
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 LDFLAGS := -s -w \
 	-X main.buildDate=$(BUILD_DATE) \
 	-X main.commit=$(COMMIT)
+
+.DEFAULT_GOAL := all
 
 -include tests/vm/vm.mk
 
@@ -24,7 +28,7 @@ vet:
 	$(GO) vet ./...
 
 fmt-check:
-	@test -z "$$($(GO)fmt -l .)" || { echo "gofmt: files need formatting:"; $(GO)fmt -l .; exit 1; }
+	@test -z "$$($(GOFMT) -l .)" || { echo "gofmt: files need formatting:"; $(GOFMT) -l .; exit 1; }
 
 lint:
 	golangci-lint run ./...
