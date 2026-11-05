@@ -6,7 +6,6 @@ import (
 	"os"
 )
 
-
 func main() {
 	showVersion := flag.Bool("version", false, "Show version")
 	flag.Parse()
@@ -35,7 +34,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`i3-nextctl - i3_next Desktop Control
+	fmt.Print(`i3-nextctl - i3_next Desktop Control
 
 Usage:
   i3-nextctl [options] <command>
