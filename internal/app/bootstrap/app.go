@@ -243,7 +243,14 @@ func (a *App) bootstrapDirs() error {
 		if d == "" {
 			continue
 		}
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		mode := os.FileMode(0o755)
+		if d == a.runtimeDir || d == config.ConfigDir() || d == config.DataDir() || d == config.StateDir() {
+			mode = 0o700
+		}
+		if err := os.MkdirAll(d, mode); err != nil {
+			return err
+		}
+		if err := os.Chmod(d, mode); err != nil {
 			return err
 		}
 	}
@@ -251,7 +258,10 @@ func (a *App) bootstrapDirs() error {
 }
 
 func (a *App) acquireLock() (*os.File, error) {
-	if err := os.MkdirAll(a.runtimeDir, 0o755); err != nil {
+	if err := os.MkdirAll(a.runtimeDir, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(a.runtimeDir, 0o700); err != nil {
 		return nil, err
 	}
 	lockPath := filepath.Join(a.runtimeDir, "i3-next.lock")

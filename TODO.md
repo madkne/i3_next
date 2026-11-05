@@ -42,9 +42,8 @@
   - Make the include path relative to the config file (or install into `~/.config/i3-next/sway/`), and make `sway --validate` pass on the installed path in e2e.
   - Until the commands exist, change the missing binds to `exec foot` / `swaymsg exit`, or comment them out.
 - [x] **FIX-04** The version is repeated in many places and does not match (`i3-nextd` = `0.1.1`, others `0.1.0`, `app.go` has a hard-coded `"0.1.0"`, plus `contracts.AppVersion`). ✅ Create an `internal/version` package (Version/Commit/BuildDate from `-ldflags`); delete the `info.go` files; all binaries (including `i3-next-doctor`) give the same `--version` output; e2e `t_version_flags` covers all four binaries.
-- [ ] **FIX-05** Check the Go version. ✅ `go.mod` has only `go` (the real minimum) and `toolchain` if needed; CI uses `go-version-file: go.mod`; the chosen version can be installed on both Tier-1 distros (`guest-provision.sh` already checks with HEAD).
-- [ ] **FIX-06** The image checksum check in `tests/vm/vm.sh` is commented out. ✅ Turn it back on; pin a dated image directory instead of `latest` so upstream updates do not cause a mismatch; on mismatch, delete the file and fail.
-- [ ] **FIX-07** `bootstrapDirs` creates directories with `0o755`, but `SECURITY.md` promises minimal permissions. ✅ Create runtime/state/data/config with `0o700`; add a unit test for the mode (using `t.TempDir()` and `XDG_*`).
+- [x] **FIX-05** Check the Go version. ✅ `go.mod` has only `go` (the real minimum) and `toolchain` if needed; CI uses `go-version-file: go.mod`; the chosen version can be installed on both Tier-1 distros (`guest-provision.sh` already checks with HEAD).
+- [x] **FIX-07** `bootstrapDirs` creates directories with `0o755`, but `SECURITY.md` promises minimal permissions. ✅ Create runtime/state/data/config with `0o700`; add a unit test for the mode (using `t.TempDir()` and `XDG_*`).
 - [ ] **FIX-08** Removing the lock file after `flock(UN)` has a classic race (a second process can lock the deleted inode). ✅ Do not delete the lock file (or re-check the inode with `stat` after open); test with two processes at once where exactly one wins.
 - [ ] **FIX-09** `internal/app/bootstrap`: ✅
   - Replace the reflection-based `callLifecycle` with typed interfaces (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`). (The current `param.Implements(ctxType)` check is backwards.)
@@ -55,7 +54,6 @@
   - Log "starting" after startup succeeds, and take the version from `internal/version`.
   - Watch for service failure while running (Health/exit) and go degraded or shut down by policy.
   - Tests: rollback on start failure, reverse stop order, shutdown timeout, hook failure, running again after Run.
-- [ ] **FIX-11** `.gitignore`: the `tmp*` pattern is too broad (it ignores things like `tmpl/`). Change it to `/tmp/`. ✅
 - [ ] **FIX-12** (P0) CI: ✅
   - Pin actions by SHA; pin `staticcheck` and `golangci-lint` to exact versions (not `latest`).
   - Add `govulncheck ./...`.
