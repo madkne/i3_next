@@ -13,8 +13,6 @@ import (
 	"i3_next/internal/core/logging"
 )
 
-var version = "dev"
-
 func main() {
 	var (
 		showVersion = flag.Bool("version", false, "Show version")
@@ -23,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("i3_next %s\n", version)
+		fmt.Printf("i3_next %s (%s)\n", VERSION, commit)
 		return
 	}
 

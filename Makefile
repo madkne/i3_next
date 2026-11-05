@@ -1,8 +1,15 @@
 APP_NAME := i3_next
-VERSION ?= 0.1.0
+
 BUILD_DIR := build
 
 GO := go
+
+BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+LDFLAGS := -s -w \
+	-X main.buildDate=$(BUILD_DATE) \
+	-X main.commit=$(COMMIT)
 
 .PHONY: all build test vet fmt clean run check
 
@@ -20,31 +27,23 @@ test:
 check: fmt vet test
 
 build:
-	mkdir -p $(BUILD_DIR)
-
-	$(GO) build \
-		-trimpath \
-		-ldflags="-s -w -X main.version=$(VERSION)" \
-		-o $(BUILD_DIR)/i3-nextd \
-		./cmd/i3-nextd
-
-	$(GO) build \
-		-trimpath \
-		-ldflags="-s -w -X main.version=$(VERSION)" \
-		-o $(BUILD_DIR)/i3-nextctl \
-		./cmd/i3-nextctl
-
-	$(GO) build \
-		-trimpath \
-		-ldflags="-s -w -X main.version=$(VERSION)" \
-		-o $(BUILD_DIR)/i3-next-session \
-		./cmd/i3-next-session
-
-	$(GO) build \
-		-trimpath \
-		-ldflags="-s -w -X main.version=$(VERSION)" \
-		-o $(BUILD_DIR)/i3-next-doctor \
-		./cmd/i3-next-doctor
+	@mkdir -p $(BUILD_DIR)
+	@echo "-------------------------------"
+	@echo "Building i3-nextd..."
+	$(GO) build -trimpath -ldflags="$(LDFLAGS)" \
+		-o $(BUILD_DIR)/i3-nextd ./cmd/i3-nextd
+	@echo "-------------------------------"
+	@echo "Building i3-nextctl..."
+	$(GO) build -trimpath -ldflags="$(LDFLAGS)" \
+		-o $(BUILD_DIR)/i3-nextctl ./cmd/i3-nextctl
+	@echo "-------------------------------"
+	@echo "Building i3-next-session..."
+	$(GO) build -trimpath -ldflags="$(LDFLAGS)" \
+		-o $(BUILD_DIR)/i3-next-session ./cmd/i3-next-session
+	@echo "-------------------------------"
+	@echo "Building i3-next-doctor..."
+	$(GO) build -trimpath -ldflags="$(LDFLAGS)" \
+		-o $(BUILD_DIR)/i3-next-doctor ./cmd/i3-next-doctor
 
 run:
 	$(GO) run ./cmd/i3-nextd

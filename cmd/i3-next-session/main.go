@@ -5,11 +5,9 @@ import (
 	"os"
 )
 
-var version = "dev"
-
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		fmt.Printf("i3-next-session %s\n", version)
+		fmt.Printf("i3-next-session %s (%s)\n", VERSION, commit)
 		return
 	}
 

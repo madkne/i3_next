@@ -6,14 +6,13 @@ import (
 	"os"
 )
 
-var version = "dev"
 
 func main() {
 	showVersion := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("i3-nextctl %s\n", version)
+		fmt.Printf("i3-nextctl %s (%s)\n", VERSION, commit)
 		return
 	}
 

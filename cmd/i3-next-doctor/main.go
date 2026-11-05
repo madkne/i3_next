@@ -5,8 +5,6 @@ import (
 	"os/exec"
 )
 
-var version = "dev"
-
 func main() {
 	if _, err := exec.LookPath("sway"); err != nil {
 		fmt.Println("[FAIL] sway not found")
