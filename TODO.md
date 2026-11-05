@@ -66,7 +66,7 @@
 
 ### 2.1 Bootstrap و lifecycle
 
--   [ ] bootstrap واقعی را پیاده‌سازی کن؛ `App.Run` صرفاً منتظر
+-   [x] bootstrap واقعی را پیاده‌سازی کن؛ `App.Run` صرفاً منتظر
     `ctx.Done()` نباشد.
 -   [ ] ترتیب راه‌اندازی اجزا را مشخص و deterministic کن.
 -   [ ] برای هر سرویس قرارداد `Start`, `Stop`, `Health` و در صورت نیاز
