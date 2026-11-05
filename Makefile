@@ -1,5 +1,8 @@
 APP_NAME := i3_next
 
+PREFIX ?= /usr/local
+DESTDIR ?=
+
 BUILD_DIR := build
 
 GO := go
@@ -71,5 +74,9 @@ build:
 run:
 	$(GO) run ./cmd/i3-nextd
 
-clean:
-	rm -rf $(BUILD_DIR)
+install: build
+	@install -d "$(DESTDIR)$(PREFIX)/bin"
+	@install -m 0755 build/i3-nextd build/i3-nextctl build/i3-next-session build/i3-next-doctor "$(DESTDIR)$(PREFIX)/bin/"
+	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/sway"
+	@install -m 0644 configs/sway/config configs/sway/outputs configs/sway/keybindings configs/sway/window-rules "$(DESTDIR)$(PREFIX)/share/i3-next/sway/"
+	@echo "Installed i3_next to $(DESTDIR)$(PREFIX)"

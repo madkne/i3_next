@@ -1,7 +1,7 @@
 # i3_next default Sway configuration
 
-include $HOME/.config/i3-next/sway/outputs
-include $HOME/.config/i3-next/sway/keybindings
-include $HOME/.config/i3-next/sway/window-rules
+include outputs
+include keybindings
+include window-rules
 
 exec i3-nextd

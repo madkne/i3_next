@@ -1,84 +1,84 @@
-# i3_next --- Production v1 Release TODO
+# i3_next — Production v1 Release TODO
 
-> هدف: رساندن مخزن از وضعیت فعلی (اسکلت daemon + CLI ابتدایی + stubهای QML) به اولین نسخهٔ قابل نصب، قابل استفاده و قابل پشتیبانی.
+> Goal: take the repo from today's state (daemon skeleton, basic CLI, QML stubs) to a first version that people can install, use, and get support for.
 >
-> **قاعدهٔ تکمیل (Definition of Done):** هر مورد فقط وقتی تیک می‌خورد که ۱) کد پیاده شده، ۲) تست مرتبط (unit/integration/e2e) در CI سبز است، ۳) مستند لازم نوشته شده، ۴) `make check` و `make vm-test` پاس می‌شوند.
+> **Definition of Done:** an item is checked only when: 1) the code is written, 2) related tests (unit/integration/e2e) pass in CI, 3) the needed docs are written, 4) `make check` and `make vm-test` pass.
 >
-> **راهنمای علامت‌ها**
+> **Legend**
 >
-> | علامت | معنی |
+> | Mark | Meaning |
 > |---|---|
 > | `P0` | Release blocker |
-> | `P1` | انتظار می‌رود در v1 باشد |
-> | `P2` | در صورت کمبود زمان به v1.x موکول می‌شود |
-> | `⛓ X` | وابسته به تسک X |
-> | `✅` | معیار پذیرش قابل‌آزمون |
+> | `P1` | Expected in v1 |
+> | `P2` | Can move to v1.x if time is short |
+> | `⛓ X` | Depends on task X |
+> | `✅` | Testable acceptance criteria |
 >
-> شناسه‌ها: `FIX` اصلاحات فوری، `CORE`، `CFG`، `SWAY`، `API`، `UI`، `SVC`، `DBUS`، `PLG`، `STO`، `SEC`، `OBS`، `SES`، `PKG`، `QA`، `PERF`، `DOC`، `CI`.
+> ID prefixes: `FIX` quick fixes, `CORE`, `CFG`, `SWAY`, `API`, `UI`, `SVC`, `DBUS`, `PLG`, `STO`, `SEC`, `OBS`, `SES`, `PKG`, `QA`, `PERF`, `DOC`, `CI`.
 
 ---
 
-## 0. محدوده و معیارهای انتشار (انجام‌شده)
+## 0. Scope and release criteria (done)
 
-- [x] محدودهٔ v1، توزیع‌ها، معماری، ماتریس سازگاری، حداقل سخت‌افزار، مدل نشست (Sway کامل)، فهرست Must-have و Out-of-scope، معیار پذیرش هر قابلیت و سیاست نسخه‌بندی در `docs/RELEASE_SCOPE.md` ثبت شده است.
-- [x] هیچ قابلیت README به‌عنوان موجود معرفی نشده مگر پیاده‌شده (بخش "Planned Features").
+- [x] v1 scope, target distros, architecture, compatibility matrix, minimum hardware, session model (full Sway session), must-have list, out-of-scope list, acceptance criteria per feature, and versioning policy are written in `docs/RELEASE_SCOPE.md`.
+- [x] No README feature is described as existing unless it is built (see "Planned Features").
 
-### بازگشایی موارد ناقص
+### Reopened items
 
-- [x] **FIX-00a** (P0) سند `RELEASE_SCOPE.md` با واقعیت `go.mod` هم‌خوان نیست: حداقل Go را 1.24 می‌گوید ولی `go.mod` روی `1.27.3` است. ✅ یک نسخهٔ واحد انتخاب شود و `go.mod`، CI، `CONTRIBUTING.md` و `RELEASE_SCOPE.md` یکی شوند. (⛓ FIX-05)
+- [x] **FIX-00a** (P0) `RELEASE_SCOPE.md` does not match `go.mod`: it says minimum Go is 1.24, but `go.mod` says `1.27.3`. ✅ Pick one version and make `go.mod`, CI, `CONTRIBUTING.md`, and `RELEASE_SCOPE.md` agree. (⛓ FIX-05)
 
 ---
 
-## 1. ساختار پروژه و کیفیت پایه
+## 1. Project structure and base quality
 
-### انجام‌شده
-- [x] قراردادهای مشترک (`internal/api/contracts`)، خطاهای دامنه، `LICENSE`، `CONTRIBUTING.md`، `SECURITY.md`، pre-commit، CI پایه، `.golangci.yml`.
+### Done
+- [x] Shared contracts (`internal/api/contracts`), domain errors, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, pre-commit, basic CI, `.golangci.yml`.
 
-### بازگشایی/اصلاحات فوری (Quick wins --- همه P0 مگر ذکر شود)
+### Reopened / quick fixes (all P0 unless noted)
 
-- [x] **FIX-01** `make` بدون آرگومان به‌جای `all`، `vm-doctor` را اجرا می‌کند (چون `-include tests/vm/vm.mk` قبل از `all` آمده). ✅ `.DEFAULT_GOAL := all` اضافه شود و تست شود که `make -n` هدف `all` را انتخاب می‌کند. همچنین `$(GO)fmt` با `GOFMT := gofmt` جایگزین شود.
-- [x] **FIX-02** `lib.sh` در ریشهٔ مخزن است ولی `tests/e2e/run.sh` آن را از `tests/e2e/lib.sh` source می‌کند. ✅ فایل به `tests/e2e/lib.sh` منتقل شود؛ `make vm-test` بدون خطای source اجرا شود.
-- [ ] **FIX-03** `configs/sway/config` فایل‌های `$HOME/.config/i3-next/sway/*` را include می‌کند که هیچ مرحله‌ای نصب نمی‌کند و keybindingها به دستورات ناموجود (`i3-nextctl launcher`, `i3-nextctl session logout`) اشاره می‌کنند. ✅
-  - مسیر include نسبی به فایل config (یا نصب در `~/.config/i3-next/sway/`) شود و در e2e `sway --validate` روی مسیر نصب‌شده پاس شود.
-  - تا پیاده‌سازی دستورات، bindهای ناموجود موقتاً به `exec foot`/`swaymsg exit` تغییر کنند یا کامنت شوند.
-- [ ] **FIX-04** نسخه در چند جا تکرار شده و ناسازگار است (`i3-nextd`=`0.1.1`، بقیه `0.1.0`، `app.go` رشتهٔ ثابت `"0.1.0"`، `contracts.AppVersion`). ✅ پکیج `internal/version` (Version/Commit/BuildDate از `-ldflags`) ایجاد شود؛ `info.go`ها حذف شوند؛ همهٔ باینری‌ها (از جمله `i3-next-doctor`) `--version` یکسان بدهند؛ e2e `t_version_flags` همهٔ چهار باینری را پوشش دهد.
-- [ ] **FIX-05** اعتبارسنجی نسخهٔ Go: ✅ `go.mod` فقط شامل `go` (حداقل واقعی) و در صورت نیاز `toolchain` باشد؛ CI از `go-version-file: go.mod` استفاده کند؛ نسخهٔ انتخابی روی هر دو توزیع Tier-1 قابل نصب باشد (`guest-provision.sh` قبلاً HEAD را چک می‌کند).
-- [ ] **FIX-06** در `tests/vm/vm.sh` بررسی checksum ایمیج کامنت شده است. ✅ بررسی بازگردانی شود؛ به‌جای `latest` یک دایرکتوری تاریخ‌دار پین شود تا mismatch ناشی از به‌روزرسانی upstream رخ ندهد؛ در صورت mismatch فایل حذف و خطا داده شود.
-- [ ] **FIX-07** `bootstrapDirs` با `0o755` می‌سازد در حالی که `SECURITY.md` permission حداقلی را وعده می‌دهد. ✅ runtime/state/data/config با `0o700` ساخته شوند؛ تست unit روی mode (با `t.TempDir()` و `XDG_*`).
-- [ ] **FIX-08** حذف lock file بعد از `flock(UN)` یک race کلاسیک دارد (فرایند دوم روی inode حذف‌شده قفل می‌گیرد). ✅ فایل lock حذف نشود (یا پس از open، inode با `stat` راستی‌آزمایی شود)؛ تست با دو فرایند هم‌زمان که دقیقاً یکی موفق شود.
+- [x] **FIX-01** Plain `make` runs `vm-doctor` instead of `all` (because `-include tests/vm/vm.mk` comes before `all`). ✅ Add `.DEFAULT_GOAL := all` and test that `make -n` picks `all`. Also replace `$(GO)fmt` with `GOFMT := gofmt`.
+- [x] **FIX-02** `lib.sh` is in the repo root, but `tests/e2e/run.sh` sources `tests/e2e/lib.sh`. ✅ Move the file to `tests/e2e/lib.sh`; `make vm-test` runs with no source error.
+- [x] **FIX-03** `configs/sway/config` includes `$HOME/.config/i3-next/sway/*`, which nothing installs, and the keybindings call commands that do not exist (`i3-nextctl launcher`, `i3-nextctl session logout`). ✅
+  - Make the include path relative to the config file (or install into `~/.config/i3-next/sway/`), and make `sway --validate` pass on the installed path in e2e.
+  - Until the commands exist, change the missing binds to `exec foot` / `swaymsg exit`, or comment them out.
+- [ ] **FIX-04** The version is repeated in many places and does not match (`i3-nextd` = `0.1.1`, others `0.1.0`, `app.go` has a hard-coded `"0.1.0"`, plus `contracts.AppVersion`). ✅ Create an `internal/version` package (Version/Commit/BuildDate from `-ldflags`); delete the `info.go` files; all binaries (including `i3-next-doctor`) give the same `--version` output; e2e `t_version_flags` covers all four binaries.
+- [ ] **FIX-05** Check the Go version. ✅ `go.mod` has only `go` (the real minimum) and `toolchain` if needed; CI uses `go-version-file: go.mod`; the chosen version can be installed on both Tier-1 distros (`guest-provision.sh` already checks with HEAD).
+- [ ] **FIX-06** The image checksum check in `tests/vm/vm.sh` is commented out. ✅ Turn it back on; pin a dated image directory instead of `latest` so upstream updates do not cause a mismatch; on mismatch, delete the file and fail.
+- [ ] **FIX-07** `bootstrapDirs` creates directories with `0o755`, but `SECURITY.md` promises minimal permissions. ✅ Create runtime/state/data/config with `0o700`; add a unit test for the mode (using `t.TempDir()` and `XDG_*`).
+- [ ] **FIX-08** Removing the lock file after `flock(UN)` has a classic race (a second process can lock the deleted inode). ✅ Do not delete the lock file (or re-check the inode with `stat` after open); test with two processes at once where exactly one wins.
 - [ ] **FIX-09** `internal/app/bootstrap`: ✅
-  - `callLifecycle` مبتنی بر reflection با interfaceهای typed (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`) جایگزین شود؛ (شرط فعلی `param.Implements(ctxType)` جهتش برعکس است).
-  - aliasهای `AddService/Add/Use` حذف شوند.
-  - `ErrAlreadyRunning/ErrNotRunning` با `internal/core/errors` یکی شوند؛ `ErrLoggerRequired` یک جا بماند.
+  - Replace the reflection-based `callLifecycle` with typed interfaces (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`). (The current `param.Implements(ctxType)` check is backwards.)
+  - Remove the aliases `AddService/Add/Use`.
+  - Merge `ErrAlreadyRunning/ErrNotRunning` with `internal/core/errors`; keep `ErrLoggerRequired` in one place.
 - [ ] **FIX-10** `App.Run`: ✅
-  - خطای `Stop` لاگ و تجمیع شود (نه نادیده گرفته شود).
-  - پیام "starting" بعد از موفقیت راه‌اندازی لاگ شود و نسخه از `internal/version` بیاید.
-  - شکست سرویس حین اجرا (Health/exit) مانیتور شود و طبق policy باعث degraded یا shutdown شود.
-  - تست‌ها: rollback هنگام شکست start، ترتیب stop معکوس، timeout در shutdown، hook failure، اجرای دوباره پس از Run.
-- [ ] **FIX-11** `.gitignore`: الگوی `tmp*` بیش‌ازحد گسترده است (فایل‌های مثل `tmpl/` را ignore می‌کند) → `/tmp/`. ✅
+  - Log and collect `Stop` errors (do not ignore them).
+  - Log "starting" after startup succeeds, and take the version from `internal/version`.
+  - Watch for service failure while running (Health/exit) and go degraded or shut down by policy.
+  - Tests: rollback on start failure, reverse stop order, shutdown timeout, hook failure, running again after Run.
+- [ ] **FIX-11** `.gitignore`: the `tmp*` pattern is too broad (it ignores things like `tmpl/`). Change it to `/tmp/`. ✅
 - [ ] **FIX-12** (P0) CI: ✅
-  - actionها با SHA پین شوند؛ `staticcheck` و `golangci-lint` به نسخهٔ مشخص پین شوند (نه `latest`).
-  - `govulncheck ./...` اضافه شود.
-  - `concurrency: cancel-in-progress` و `timeout-minutes` برای jobها.
-  - job QML با `|| true` همیشه سبز می‌شود؛ باید در نبود `qmllint` واقعاً نصب یا job fail شود.
-  - ماتریس Go (حداقل و فعلی).
-- [ ] **FIX-13** `README.md` بخش "Structure" ساختار هدف است نه واقعی؛ ✅ عنوان "Target structure (not yet created)" بخورد یا ساختار واقعی نمایش داده شود، و آیتم‌های `[x]` بخش ۱ که فقط اسکلت‌اند (ساختار پکیج‌ها، فایل‌های خالی config/QML) به حالت `[ ]` برگردند تا با کار واقعی تیک بخورند.
-- [ ] **FIX-14** (P1) سند `docs/SECURITY.md` در `SECURITY.md` ارجاع داده شده ولی وجود ندارد؛ `scripts/build.sh` منبع build دوم است؛ `scripts/install.sh` فقط باینری نصب می‌کند (نه config/QML/session). ✅ تصمیم نهایی و هم‌خوانی (⛓ PKG-01).
-- [ ] **FIX-15** `i3-next-doctor` همیشه exit 0 می‌دهد حتی با `[FAIL]`. ✅ exit code غیرصفر در FAIL، `--json`، و تست e2e جدید (⛓ OBS-04).
-- [ ] **FIX-16** (P1) قرارداد نام‌گذاری یکدست: `i3_next` (module/AppName) در برابر `i3-next` (dirها/باینری‌ها). ✅ در `docs/development/naming.md` ثبت شود و اسکریپتی بررسی کند.
+  - Pin actions by SHA; pin `staticcheck` and `golangci-lint` to exact versions (not `latest`).
+  - Add `govulncheck ./...`.
+  - Add `concurrency: cancel-in-progress` and `timeout-minutes` to jobs.
+  - The QML job uses `|| true`, so it is always green; it must really install `qmllint` or fail.
+  - Add a Go version matrix (minimum and current).
+- [ ] **FIX-13** The README "Structure" section is the target layout, not the real one. ✅ Title it "Target structure (not yet created)" or show the real tree; also set `[x]` items in section 1 that are only skeletons (package layout, empty config/QML files) back to `[ ]`.
+- [ ] **FIX-14** (P1) `SECURITY.md` points to `docs/SECURITY.md`, which does not exist; `scripts/build.sh` is a second build source; `scripts/install.sh` installs only binaries (not config/QML/session). ✅ Make a final decision and align them. (⛓ PKG-01)
+- [ ] **FIX-15** `i3-next-doctor` always exits 0, even with `[FAIL]`. ✅ Non-zero exit on FAIL, `--json`, and a new e2e test. (⛓ OBS-04)
+- [ ] **FIX-16** (P1) One naming rule: `i3_next` (module/AppName) vs `i3-next` (dirs/binaries). ✅ Write it in `docs/development/naming.md` and add a script that checks it.
 
-### باقی‌ماندهٔ بخش ۱
-- [ ] **STRUCT-01** (P0) پکیج‌ها را فقط وقتی بساز که اولین کد واقعی دارند (بدون پوشهٔ خالی). ✅ قاعدهٔ import (core ⟵ adapters/services ⟵ api) با `depguard`/`go-arch-lint` در `.golangci.yml` اجباری شود.
-- [ ] **STRUCT-02** (P1) `CODEOWNERS`, قالب PR/Issue، `CHANGELOG.md` (Keep a Changelog).
-- [ ] **STRUCT-03** (P1) `go.sum` و سیاست dependency: هر dependency جدید با دلیل در PR ثبت و مجوزش بررسی شود (⛓ SEC-10).
+### Rest of section 1
+- [ ] **STRUCT-01** (P0) Create packages only when they have real code (no empty folders). ✅ Enforce the import rule (core ⟵ adapters/services ⟵ api) with `depguard` / `go-arch-lint` in `.golangci.yml`.
+- [ ] **STRUCT-02** (P1) `CODEOWNERS`, PR/Issue templates, `CHANGELOG.md` (Keep a Changelog).
+- [ ] **STRUCT-03** (P1) `go.sum` and a dependency policy: every new dependency needs a reason in the PR and a license check. (⛓ SEC-10)
 
 ---
 
-## 2. Desktop Core و چرخه عمر
+## 2. Desktop Core and lifecycle
 
-### 2.1 Bootstrap و lifecycle
-- [ ] **CORE-01** (P0) ترتیب راه‌اندازی deterministic: سرویس‌ها با `DependsOn()` و مرتب‌سازی توپولوژیک؛ چرخه تشخیص و خطا بدهد. ✅ تست ترتیب و تشخیص cycle. ⛓ FIX-09
-- [ ] **CORE-02** (P0) قرارداد سرویس در `internal/core/registry`:
+### 2.1 Bootstrap and lifecycle
+- [ ] **CORE-01** (P0) Deterministic startup order: services declare `DependsOn()` and are sorted topologically; cycles give an error. ✅ Test order and cycle detection. ⛓ FIX-09
+- [ ] **CORE-02** (P0) Service contract in `internal/core/registry`:
   ```go
   type Service interface {
       Name() string
@@ -87,343 +87,343 @@
       Health(ctx context.Context) contracts.ServiceInfo
   }
   ```
-  `Reloader` اختیاری؛ سرویس‌ها `required` یا `optional` باشند (optional ⟵ degraded). ✅
-- [ ] **CORE-03** (P0) Rollback مرحله‌ای: شکست سرویس required ⟵ توقف همهٔ سرویس‌های شروع‌شده؛ شکست optional ⟵ `degraded` و ادامه. ✅ تست با fake service.
-- [ ] **CORE-04** (P0) Shutdown ترتیبی با timeout هر سرویس (نه فقط کلی)؛ سرویس گیرکرده kill/لاگ شود. ✅ تست hang.
-- [ ] **CORE-05** (P0) تست سیگنال: SIGTERM/SIGINT/SIGHUP(=reload) و exit code مشخص (e2e `t_daemon_lifecycle` موجود گسترش یابد).
-- [ ] **CORE-06** (P1) Single-instance: پیام خطای قابل‌فهم + PID فرایند قبلی؛ stale lock تشخیص داده شود. ⛓ FIX-08
-- [ ] **CORE-07** (P1) وضعیت daemon و علت آخرین شکست در state (`status` API) و فایل `state_dir/last-failure.json`.
+  `Reloader` is optional; services are `required` or `optional` (optional ⟵ degraded). ✅
+- [ ] **CORE-03** (P0) Staged rollback: a required service fails ⟵ stop all services already started; an optional one fails ⟵ `degraded` and continue. ✅ Test with a fake service.
+- [ ] **CORE-04** (P0) Ordered shutdown with a timeout per service (not only a global one); a stuck service is killed and logged. ✅ Test a hang.
+- [ ] **CORE-05** (P0) Signal tests: SIGTERM/SIGINT/SIGHUP (= reload) and clear exit codes (extend the existing e2e `t_daemon_lifecycle`).
+- [ ] **CORE-06** (P1) Single instance: clear error message plus the PID of the old process; detect stale locks. ⛓ FIX-08
+- [ ] **CORE-07** (P1) Daemon status and the reason for the last failure are kept in state (`status` API) and in `state_dir/last-failure.json`.
 
 ### 2.2 Process supervisor (`internal/app/supervisor`)
-- [ ] **CORE-10** (P0) اجرای process با `exec.CommandContext` و آرگومان‌ها (بدون shell)؛ مسیر با `LookPath` و بررسی owner/permission اعتبارسنجی شود. ✅
-- [ ] **CORE-11** (P0) گرفتن stdout/stderr به log ساختاریافته (با خط‌بندی و سقف اندازه)، ثبت exit code/signal. ✅
-- [ ] **CORE-12** (P0) Restart policy: `max_restarts` در `window`، backoff نمایی با jitter؛ فراتر از سقف ⟵ `failed/degraded` بدون loop. ✅ تست با process دائماً کرشی.
-- [ ] **CORE-13** (P0) توقف child: SIGTERM ⟵ grace ⟵ SIGKILL روی process group (`Setpgid`)؛ بعد از مرگ daemon هیچ یتیمی نماند (`Pdeathsig`). ✅ تست e2e.
-- [ ] **CORE-14** (P1) Environment allowlist برای child و redact متغیرهای حساس (`*TOKEN*`, `*SECRET*`, `*PASSWORD*`) در log.
+- [ ] **CORE-10** (P0) Run processes with `exec.CommandContext` and an argument list (no shell); validate the path with `LookPath` and check owner/permissions. ✅
+- [ ] **CORE-11** (P0) Capture stdout/stderr into structured logs (line-split, size-capped); record exit code/signal. ✅
+- [ ] **CORE-12** (P0) Restart policy: `max_restarts` within a `window`, exponential backoff with jitter; above the limit ⟵ `failed/degraded`, no loop. ✅ Test with a process that always crashes.
+- [ ] **CORE-13** (P0) Stopping a child: SIGTERM ⟵ grace period ⟵ SIGKILL on the process group (`Setpgid`); no orphans after the daemon dies (`Pdeathsig`). ✅ e2e test.
+- [ ] **CORE-14** (P1) Environment allowlist for children, and redact sensitive variables (`*TOKEN*`, `*SECRET*`, `*PASSWORD*`) in logs.
 
-### 2.3 Event bus و state
-- [ ] **CORE-20** (P0) `internal/core/eventbus` با generics: `Subscribe[T](topic) (<-chan T, cancel)`. ✅
-- [ ] **CORE-21** (P0) سیاست backpressure مستند و تست‌شده: صف bounded؛ برای eventهای state (آخرین مقدار مهم است) coalesce، برای eventهای ضروری drop نشود/ خطا گزارش شود؛ panic در handler جداسازی شود.
-- [ ] **CORE-22** (P0) تعریف eventهای اصلی در `internal/api/events` با schema نسخه‌دار: `SessionStarted`, `SwayConnected/Disconnected`, `WorkspaceChanged`, `OutputChanged`, `ConfigChanged`, `ServiceStateChanged`, `ShutdownRequested`.
-- [ ] **CORE-23** (P0) `internal/core/state`: snapshot immutable + نسخهٔ monotonic (برای بازیابی snapshot در API)؛ تست `-race` و بنچمارک. ⛓ API-09
-- [ ] **CORE-24** (P1) تست بار (۱۰k event/s، ۱۰۰ subscriber) و بررسی نشت goroutine با `goleak`.
+### 2.3 Event bus and state
+- [ ] **CORE-20** (P0) `internal/core/eventbus` with generics: `Subscribe[T](topic) (<-chan T, cancel)`. ✅
+- [ ] **CORE-21** (P0) Documented and tested backpressure policy: bounded queue; coalesce state events (only the latest value matters); never silently drop essential events (report an error); isolate handler panics.
+- [ ] **CORE-22** (P0) Define the main events in `internal/api/events` with a versioned schema: `SessionStarted`, `SwayConnected/Disconnected`, `WorkspaceChanged`, `OutputChanged`, `ConfigChanged`, `ServiceStateChanged`, `ShutdownRequested`.
+- [ ] **CORE-23** (P0) `internal/core/state`: immutable snapshot plus a monotonic version (for snapshot recovery in the API); `-race` test and a benchmark. ⛓ API-09
+- [ ] **CORE-24** (P1) Load test (10k events/s, 100 subscribers) and goroutine leak check with `goleak`.
 
 ---
 
 ## 3. Configuration (`internal/core/config`)
 
-> فعلاً فقط `paths.go` وجود دارد؛ همهٔ موارد زیر باز هستند.
+> Today only `paths.go` exists, so everything below is open.
 
-- [ ] **CFG-01** (P0) ساختارهای Go تایپ‌شده برای چهار فایل + `version` و parser سخت‌گیر (`yaml.v3` با `KnownFields(true)`) — dependencyها ثبت شوند. ✅ فیکسچرهای valid/invalid.
-- [ ] **CFG-02** (P0) schema نوشته‌شده (JSON Schema یا validator Go) و پیام خطا با مسیر کلید و شمارهٔ خط (`desktop.yaml:12 ui.theme: unknown value "x"`).
-- [ ] **CFG-03** (P0) `//go:embed` برای `configs/defaults/*` و پر کردن مقادیر معتبر (`shortcuts.yaml`/`plugins.yaml` نباید فقط لیست خالی باشند: حداقل shortcutهای پیش‌فرض واقعی). 
-- [ ] **CFG-04** (P0) اولویت لایه‌ها مستند و پیاده: defaults < `/etc/i3-next` < `~/.config/i3-next` < env (`I3NEXT_*`) < flags. ✅ تست merge.
-- [ ] **CFG-05** (P0) نصب defaults در اولین اجرا با `O_EXCL` (هرگز overwrite). ✅ تست idempotent.
-- [ ] **CFG-06** (P0) نوشتن atomic: temp در همان دایرکتوری ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`؛ permission `0600/0644` مشخص. ✅ تست crash-injection.
-- [ ] **CFG-07** (P0) config نامعتبر: daemon با آخرین config معتبر (یا defaults) بالا بیاید، وضعیت `degraded` + خطای actionable؛ بدون restart-loop. ✅ e2e.
-- [ ] **CFG-08** (P1) Migration نسخه‌دار (`vN ⟶ vN+1`) با backup خودکار قبل از migrate و تست golden-file.
-- [ ] **CFG-09** (P1) Reload امن (SIGHUP + `config.reload` API): diff محاسبه شود؛ کلیدهای non-reloadable صریحاً گزارش شوند.
+- [ ] **CFG-01** (P0) Typed Go structs for the four files plus `version`, and a strict parser (`yaml.v3` with `KnownFields(true)`); record the new dependencies. ✅ Valid/invalid fixtures.
+- [ ] **CFG-02** (P0) A written schema (JSON Schema or a Go validator) and error messages with key path and line number (`desktop.yaml:12 ui.theme: unknown value "x"`).
+- [ ] **CFG-03** (P0) `//go:embed` for `configs/defaults/*` and fill in valid values (`shortcuts.yaml` / `plugins.yaml` must not be just empty lists: add real default shortcuts at least).
+- [ ] **CFG-04** (P0) Documented and built layer order: defaults < `/etc/i3-next` < `~/.config/i3-next` < env (`I3NEXT_*`) < flags. ✅ Merge test.
+- [ ] **CFG-05** (P0) Install defaults on first run with `O_EXCL` (never overwrite). ✅ Idempotency test.
+- [ ] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test.
+- [ ] **CFG-07** (P0) Invalid config: the daemon starts with the last valid config (or defaults), state is `degraded` with an actionable error; no restart loop. ✅ e2e.
+- [ ] **CFG-08** (P1) Versioned migration (`vN ⟶ vN+1`) with an automatic backup first, and a golden-file test.
+- [ ] **CFG-09** (P1) Safe reload (SIGHUP + `config.reload` API): compute a diff; report non-reloadable keys clearly.
 - [ ] **CFG-10** (P1) `i3-nextctl config validate|show|backup|restore`. ⛓ OBS-05
-- [ ] **CFG-11** (P1) `docs/config/` مرجع کامل کلیدها (تولید خودکار از schema) + نمونه.
-- [ ] **CFG-12** (P1) File watcher (`fsnotify`) اختیاری با debounce برای reload.
+- [ ] **CFG-11** (P1) `docs/config/` full key reference (generated from the schema) plus examples.
+- [ ] **CFG-12** (P1) Optional file watcher (`fsnotify`) with debounce for reload.
 
 ---
 
-## 4. Sway Integration (`internal/adapters/sway`)
+## 4. Sway integration (`internal/adapters/sway`)
 
 ### 4.1 IPC client
-- [ ] **SWAY-01** (P0) Client مستقل: تشخیص `SWAYSOCK` (و fallback `swaymsg -t get_socket_path` فقط اگر لازم)، خطای واضح در نبود. ✅
-- [ ] **SWAY-02** (P0) پروتکل i3-ipc: magic `i3-ipc`، header (len,type) با endianness native، تابع framing تست‌شده با fuzz (`go test -fuzz`) برای پیام‌های ناقص/بزرگ.
-- [ ] **SWAY-03** (P0) Commands (`RUN_COMMAND`)، queries (`GET_WORKSPACES/OUTPUTS/TREE/INPUTS/VERSION`) و subscribe (window/workspace/output/mode/shutdown/input). 
-- [ ] **SWAY-04** (P0) Reconnect با backoff + resubscribe + بازسازی snapshot کامل پس از اتصال؛ eventهای `shutdown` از Sway درست مدیریت شوند. ✅ e2e: kill/restart Sway.
-- [ ] **SWAY-05** (P0) Context/timeout برای هر درخواست؛ همزمانی ایمن (یک reader goroutine، correlation بر اساس نوع پیام).
-- [ ] **SWAY-06** (P0) مدل‌های typed + fixture JSON واقعی از Sway 1.8 و 1.10+ در `internal/adapters/sway/testdata/`. ✅ تست parse با فیلدهای ناشناخته‌ی tolerated.
-- [ ] **SWAY-07** (P1) `Adapter` interface در `internal/adapters/sway` (سرویس‌ها فقط به آن وابسته‌اند) + fake برای تست سرویس‌ها.
-- [ ] **SWAY-08** (P1) Feature detection بر پایهٔ نسخه (جدول قابلیت در کد + مستند).
-- [ ] **SWAY-09** (P0) Integration test با Sway headless در `make vm-test` (همان زیرساخت `tests/e2e`).
+- [ ] **SWAY-01** (P0) Standalone client: find `SWAYSOCK` (fallback to `swaymsg -t get_socket_path` only if needed), clear error if missing. ✅
+- [ ] **SWAY-02** (P0) i3-ipc protocol: magic `i3-ipc`, header (len, type) in native endianness; framing tested with fuzz (`go test -fuzz`) for partial/huge messages.
+- [ ] **SWAY-03** (P0) Commands (`RUN_COMMAND`), queries (`GET_WORKSPACES/OUTPUTS/TREE/INPUTS/VERSION`), and subscribe (window/workspace/output/mode/shutdown/input).
+- [ ] **SWAY-04** (P0) Reconnect with backoff + resubscribe + full snapshot rebuild after connecting; handle Sway `shutdown` events correctly. ✅ e2e: kill/restart Sway.
+- [ ] **SWAY-05** (P0) Context/timeout for every request; safe concurrency (one reader goroutine, matching replies by message type).
+- [ ] **SWAY-06** (P0) Typed models plus real JSON fixtures from Sway 1.8 and 1.10+ in `internal/adapters/sway/testdata/`. ✅ Parse test that tolerates unknown fields.
+- [ ] **SWAY-07** (P1) An `Adapter` interface in `internal/adapters/sway` (services depend only on it) plus a fake for service tests.
+- [ ] **SWAY-08** (P1) Version-based feature detection (a capability table in code and docs).
+- [ ] **SWAY-09** (P0) Integration test with headless Sway in `make vm-test` (using the existing `tests/e2e` setup).
 
-### 4.2 مدیریت پنجره/workspace
-- [ ] **SWAY-20** (P0) سرویس `workspace`/`window-manager`: snapshot + eventها ⟵ event bus (⛓ CORE-20/22).
-- [ ] **SWAY-21** (P0) عملیات: focus/move/close/floating/layout/move-to-workspace/output. ورودی‌ها (نام workspace، app_id) **escape/validate** شوند تا injection به command Sway ممکن نباشد. ✅ تست با ورودی `; exec ...`.
-- [ ] **SWAY-22** (P1) چند‌مانیتوره: workspace↔output، hotplug (تست موجود `sway_monitor_hotplug` به سرویس وصل شود).
-- [ ] **SWAY-23** (P1) Window rules با schema؛ تولید `window-rules` از config به‌جای فایل ثابت.
-- [ ] **SWAY-24** (P0) تولید config Sway از template (`text/template`) در `state_dir/generated/`، اعتبارسنجی با `sway --validate -c`، و **هرگز** overwrite config کاربر بدون backup/رضایت. ✅
-- [ ] **SWAY-25** (P1) مستند keybindingهای پیش‌فرض و راه بازگشت به config پیش‌فرض.
-
----
-
-## 5. API بین Core و Shell (`internal/api/rpc`)
-
-- [ ] **API-01** (P0) تصمیم ثبت‌شده (ADR در `docs/architecture/adr/0001-rpc.md`): Unix socket + JSON-RPC 2.0 (line- یا length-prefixed). 
-- [ ] **API-02** (P0) Socket در `$XDG_RUNTIME_DIR/i3-next/i3-next.sock` با `0600`؛ دایرکتوری `0700`؛ `umask` قبل از `Listen`؛ حذف stale socket فقط وقتی connect ناموفق باشد. ✅ تست permission.
-- [ ] **API-03** (P0) بررسی `SO_PEERCRED`: فقط UID صاحب نشست. ✅ تست رد UID دیگر (در VM با کاربر دوم).
-- [ ] **API-04** (P0) handshake `hello {api_version, client}` و پاسخ سازگاری/ناسازگاری (`contracts.APIVersion`)؛ خطای `version_mismatch` به UI نمایش داده شود.
-- [ ] **API-05** (P0) محدودیت‌ها: حداکثر اندازهٔ پیام (مثلاً 1 MiB)، timeout هر درخواست، سقف درخواست هم‌زمان، سقف اتصال. ✅ تست fuzz/over-limit.
-- [ ] **API-06** (P0) نگاشت خطا: `internal/core/errors` ⟷ `contracts.ErrorCode` در یک جا (جدول واحد) با تست.
-- [ ] **API-07** (P0) متدهای حداقلی v1: `status.get`, `service.list/restart`, `config.get/validate/reload`, `workspace.*`, `output.*`, `launcher.search/launch`, `notification.*`, `session.logout/restart/shutdown`.
-- [ ] **API-08** (P0) Event stream: `events.subscribe` (notification بدون id) با شمارهٔ ترتیب.
-- [ ] **API-09** (P0) بازیابی پس از reconnect: `state.snapshot` با `version`؛ client با gap تشخیص می‌دهد و snapshot جدید می‌گیرد. ⛓ CORE-23
-- [ ] **API-10** (P1) مستندات `docs/api/` (تولید از کد) + نمونه `socat`.
-- [ ] **API-11** (P1) Contract test مشترک: فایل‌های golden JSON که هم Go و هم QML (mock backend) روی آن تست می‌شوند.
-- [ ] **API-12** (P1) Rate limit روی متدهای حساس (shutdown/launch).
+### 4.2 Window and workspace management
+- [ ] **SWAY-20** (P0) `workspace` / `window-manager` service: snapshot + events ⟵ event bus. (⛓ CORE-20/22)
+- [ ] **SWAY-21** (P0) Operations: focus/move/close/floating/layout/move-to-workspace/output. Inputs (workspace name, app_id) must be **escaped/validated** so command injection into Sway is impossible. ✅ Test with an input like `; exec ...`.
+- [ ] **SWAY-22** (P1) Multi-monitor: workspace↔output, hotplug (connect the existing `sway_monitor_hotplug` test to the service).
+- [ ] **SWAY-23** (P1) Window rules with a schema; generate `window-rules` from config instead of a fixed file.
+- [ ] **SWAY-24** (P0) Generate the Sway config from a template (`text/template`) into `state_dir/generated/`, validate with `sway --validate -c`, and **never** overwrite the user's config without a backup/consent. ✅
+- [ ] **SWAY-25** (P1) Document the default keybindings and how to return to the default config.
 
 ---
 
-## 6. Quickshell Desktop Shell
+## 5. Core ⟷ Shell API (`internal/api/rpc`)
 
-### 6.1 زیرساخت
-- [ ] **UI-01** (P0) `Backend.qml` واقعی: اتصال به socket (Quickshell `Socket` / `SplitParser`)، handshake، reconnect با backoff، وضعیت `disconnected/connecting/connected/incompatible`. ⛓ API-04
-- [ ] **UI-02** (P0) `EventBridge.qml`: parse eventها و پر کردن modelهای QML (`ListModel`/`QtObject`) بدون block کردن thread UI.
-- [ ] **UI-03** (P0) جریان راه‌اندازی `Main→Shell→Session` واقعی و اتصال `qmldir` (ماژول `i3_next` با import path قابل‌کشف، نصب در `/usr/share/i3-next/quickshell`).
-- [ ] **UI-04** (P0) `Variants`/`Scope` برای هر مانیتور؛ hotplug درست (panel ساخته/حذف شود). ✅ e2e با `create_output`/`unplug`.
-- [ ] **UI-05** (P0) مدیریت خطا: شکست یک component کل shell را نبرد (Loader با `onStatusChanged`)؛ crash shell ⟵ supervisor ری‌استارت (⛓ CORE-12).
-- [ ] **UI-06** (P1) Theme tokens جدا (`themes/default/Tokens.qml`) و تغییر زنده از `Settings.qml`.
-- [ ] **UI-07** (P1) Logging/debug mode (`I3NEXT_UI_DEBUG=1`) و ارسال خطاها به daemon.
-- [ ] **UI-08** (P1) Scale/رزولوشن‌های مختلف؛ دسترس‌پذیری (focus, keyboard-nav, contrast ≥ 4.5:1، حداقل اندازهٔ فونت).
-- [ ] **UI-09** (P0) `qmllint` در CI اجباری و بدون خطا؛ تست smoke: `quickshell -p ui/quickshell` در VM بدون خطا بالا بیاید.
+- [ ] **API-01** (P0) Recorded decision (ADR in `docs/architecture/adr/0001-rpc.md`): Unix socket + JSON-RPC 2.0 (line- or length-prefixed).
+- [ ] **API-02** (P0) Socket at `$XDG_RUNTIME_DIR/i3-next/i3-next.sock` with `0600`; directory `0700`; set `umask` before `Listen`; remove a stale socket only if connecting fails. ✅ Permission test.
+- [ ] **API-03** (P0) Check `SO_PEERCRED`: only the session owner's UID is allowed. ✅ Test that another UID is rejected (in the VM with a second user).
+- [ ] **API-04** (P0) `hello {api_version, client}` handshake and a compatible/incompatible reply (`contracts.APIVersion`); show `version_mismatch` in the UI.
+- [ ] **API-05** (P0) Limits: max message size (for example 1 MiB), per-request timeout, max concurrent requests, max connections. ✅ Fuzz/over-limit test.
+- [ ] **API-06** (P0) Error mapping: `internal/core/errors` ⟷ `contracts.ErrorCode` in one table, with a test.
+- [ ] **API-07** (P0) Minimum v1 methods: `status.get`, `service.list/restart`, `config.get/validate/reload`, `workspace.*`, `output.*`, `launcher.search/launch`, `notification.*`, `session.logout/restart/shutdown`.
+- [ ] **API-08** (P0) Event stream: `events.subscribe` (notifications without id) with a sequence number.
+- [ ] **API-09** (P0) Recovery after reconnect: `state.snapshot` with a `version`; the client detects a gap and fetches a new snapshot. ⛓ CORE-23
+- [ ] **API-10** (P1) `docs/api/` docs (generated from code) plus a `socat` example.
+- [ ] **API-11** (P1) Shared contract test: golden JSON files that both Go and QML (mock backend) test against.
+- [ ] **API-12** (P1) Rate limit on sensitive methods (shutdown/launch).
 
-### 6.2 قابلیت‌ها (ترتیب پیشنهادی)
-- [ ] **UI-10** (P0) Panel: ساعت، workspaces، شبکه، صدا، باتری (در نبود باتری مخفی). ⛓ SVC-*
-- [ ] **UI-11** (P0) Launcher: خواندن desktop entryها (XDG، `NoDisplay/Hidden/OnlyShowIn`)، جست‌وجوی fuzzy، اجرای امن (بدون shell؛ field codes `%u %f` درست پردازش شوند). 
-- [ ] **UI-12** (P0) Session menu: logout/restart/shutdown با تأیید.
-- [ ] **UI-13** (P1) Notification popup + Notification Center (⛓ SVC-03).
-- [ ] **UI-14** (P1) Control Center (audio، brightness، network، Bluetooth در صورت وجود).
+---
+
+## 6. Quickshell desktop shell
+
+### 6.1 Foundation
+- [ ] **UI-01** (P0) Real `Backend.qml`: connect to the socket (Quickshell `Socket` / `SplitParser`), handshake, reconnect with backoff, states `disconnected/connecting/connected/incompatible`. ⛓ API-04
+- [ ] **UI-02** (P0) `EventBridge.qml`: parse events and fill QML models (`ListModel`/`QtObject`) without blocking the UI thread.
+- [ ] **UI-03** (P0) A real startup flow `Main→Shell→Session` and a working `qmldir` (module `i3_next` with a discoverable import path, installed in `/usr/share/i3-next/quickshell`).
+- [ ] **UI-04** (P0) `Variants`/`Scope` per monitor; hotplug works (panel is created/removed). ✅ e2e with `create_output` / `unplug`.
+- [ ] **UI-05** (P0) Error handling: one failing component must not take down the whole shell (Loader with `onStatusChanged`); if the shell crashes, the supervisor restarts it. (⛓ CORE-12)
+- [ ] **UI-06** (P1) Separate theme tokens (`themes/default/Tokens.qml`) and live change from `Settings.qml`.
+- [ ] **UI-07** (P1) Logging/debug mode (`I3NEXT_UI_DEBUG=1`) and send errors to the daemon.
+- [ ] **UI-08** (P1) Different scales/resolutions; accessibility (focus, keyboard navigation, contrast ≥ 4.5:1, minimum font size).
+- [ ] **UI-09** (P0) `qmllint` required and clean in CI; smoke test: `quickshell -p ui/quickshell` starts with no errors in the VM.
+
+### 6.2 Features (suggested order)
+- [ ] **UI-10** (P0) Panel: clock, workspaces, network, audio, battery (hidden if there is no battery). ⛓ SVC-*
+- [ ] **UI-11** (P0) Launcher: read desktop entries (XDG, `NoDisplay/Hidden/OnlyShowIn`), fuzzy search, safe launch (no shell; handle field codes `%u %f` correctly).
+- [ ] **UI-12** (P0) Session menu: logout/restart/shutdown with confirmation.
+- [ ] **UI-13** (P1) Notification popup + Notification Center. (⛓ SVC-03)
+- [ ] **UI-14** (P1) Control Center (audio, brightness, network, Bluetooth if present).
 - [ ] **UI-15** (P1) OSD (volume/brightness/workspace).
 - [ ] **UI-16** (P1) Task/window list.
-- [ ] **UI-17** (P1) حالت‌های empty/loading/error/disconnected برای همهٔ view‌ها (چک‌لیست در PR template).
-- [ ] **UI-18** (P1) Settings پایهٔ ظاهر/theme.
+- [ ] **UI-17** (P1) Empty/loading/error/disconnected states for every view (checklist in the PR template).
+- [ ] **UI-18** (P1) Basic appearance/theme settings.
 
 ---
 
-## 7. سرویس‌های سیستم
+## 7. System services
 
-### 7.1 الزامات مشترک (قبل از هر سرویس)
-- [ ] **SVC-00** (P0) قالب مشترک سرویس (`internal/services/<name>`): config `enabled`، dependency اختیاری ⟵ `degraded` با دلیل، timeout/cancel روی عملیات، انتشار `ServiceStateChanged`، تست با fake adapter. ✅ تست «dependency غایب».
+### 7.1 Shared rules (before any service)
+- [ ] **SVC-00** (P0) Shared service template (`internal/services/<name>`): `enabled` config, optional dependency ⟵ `degraded` with a reason, timeout/cancel on operations, publish `ServiceStateChanged`, tests with a fake adapter. ✅ "Missing dependency" test.
 
 ### 7.2 Must-have
-- [ ] **SVC-01** (P0) Session manager (⛓ SES-*).
-- [ ] **SVC-02** (P1) Wallpaper: `swaybg` تحت supervisor، چندمانیتوره.
-- [ ] **SVC-03** (P1) Notification: پیاده‌سازی `org.freedesktop.Notifications` روی session bus (اگر daemon دیگری نام را دارد خطای واضح)، پشتیبانی actions/urgency/timeout، سقف تعداد و اندازه. ⛓ DBUS-01
-- [ ] **SVC-04** (P1) Audio: PipeWire/WirePlumber (`wpctl` با آرگومان لیست یا کتابخانه)، volume/mute/default device، رویداد تغییر.
-- [ ] **SVC-05** (P1) Network: NetworkManager D-Bus (status فقط‌خواندنی در v1؛ نبود NM ⟵ degraded).
-- [ ] **SVC-06** (P1) Power: UPower (باتری/AC) + logind (suspend/reboot/poweroff) با polkit.
-- [ ] **SVC-07** (P0) Lock screen: `swaylock` (ابزار آزموده) ⟵ بدون lock «نمایشی». رفتار crash مولفه: **fail-closed** (نشست باز نماند؛ `ext-session-lock` ⟵ در crash کلاینت صفحه قفل می‌ماند). ✅ تست دستی/خودکار با kill swaylock.
-- [ ] **SVC-08** (P1) Idle: `swayidle` با policy از config (lock/DPMS/suspend) و inhibit.
-- [ ] **SVC-09** (P1) Screenshot: `grim`/`slurp`، ذخیره در `XDG_PICTURES_DIR`، نام فایل امن.
-- [ ] **SVC-10** (P1) Clipboard: `wl-clipboard` (get/set در محدودهٔ v1، بدون history پایدار).
-- [ ] **SVC-11** (P1) Display: خروجی‌ها/رزولوشن/scale با اعتبارسنجی مود (از `get_outputs`) و revert خودکار پس از N ثانیه (مثل «Keep changes?»).
-- [ ] **SVC-12** (P1) Media: MPRIS روی D-Bus.
-- [ ] **SVC-13** (P1) Brightness (برای Control Center): `brightnessctl`/logind `SetBrightness`.
+- [ ] **SVC-01** (P0) Session manager. (⛓ SES-*)
+- [ ] **SVC-02** (P1) Wallpaper: `swaybg` under the supervisor, multi-monitor.
+- [ ] **SVC-03** (P1) Notifications: implement `org.freedesktop.Notifications` on the session bus (clear error if another daemon owns the name), support actions/urgency/timeout, limit count and size. ⛓ DBUS-01
+- [ ] **SVC-04** (P1) Audio: PipeWire/WirePlumber (`wpctl` with an argument list, or a library), volume/mute/default device, change events.
+- [ ] **SVC-05** (P1) Network: NetworkManager D-Bus (read-only status in v1; no NM ⟵ degraded).
+- [ ] **SVC-06** (P1) Power: UPower (battery/AC) + logind (suspend/reboot/poweroff) with polkit.
+- [ ] **SVC-07** (P0) Lock screen: `swaylock` (a trusted tool); no fake lock. If the component crashes it must **fail closed** (the session must not open; with `ext-session-lock` the screen stays locked when the client dies). ✅ Manual/automatic test by killing swaylock.
+- [ ] **SVC-08** (P1) Idle: `swayidle` with a policy from config (lock/DPMS/suspend) and inhibit.
+- [ ] **SVC-09** (P1) Screenshot: `grim` / `slurp`, save to `XDG_PICTURES_DIR`, safe file names.
+- [ ] **SVC-10** (P1) Clipboard: `wl-clipboard` (get/set within v1 scope, no persistent history).
+- [ ] **SVC-11** (P1) Display: outputs/resolution/scale with mode validation (from `get_outputs`) and automatic revert after N seconds (like "Keep changes?").
+- [ ] **SVC-12** (P1) Media: MPRIS over D-Bus.
+- [ ] **SVC-13** (P1) Brightness (for Control Center): `brightnessctl` / logind `SetBrightness`.
 
-### 7.3 قابل تعویق (P2)
-- [ ] Bluetooth کامل، File search/command palette، Clipboard history، Layout manager، Color picker، System monitor، Workspace overview/انیمیشن، Power profiles.
-
----
-
-## 8. D-Bus و یکپارچگی سیستم (`internal/adapters/dbus`)
-
-- [ ] **DBUS-01** (P0/P1) انتخاب کتابخانه (`godbus/dbus/v5`) + wrapper با reconnect/timeout و تفکیک session/system bus. جدول «چه سرویسی از کدام bus» در `docs/architecture/dbus.md`.
-- [ ] **DBUS-02** (P1) Fake bus برای تست (یا `dbus-run-session` در e2e).
-- [ ] **DBUS-03** (P1) ورودی‌های D-Bus اعتبارسنجی شوند (اندازه/نوع/UTF-8).
-- [ ] **DBUS-04** (P1) polkit/logind برای power: حداقل دسترسی، بدون `sudo`.
-- [ ] **DBUS-05** (P2) D-Bus service file برای activation (در صورت نیاز) (⛓ PKG-05).
-- [ ] **DBUS-06** (P1) تست در نشست ناقص (بدون UPower/NM/…).
+### 7.3 Can wait (P2)
+- [ ] Full Bluetooth, file search / command palette, clipboard history, layout manager, color picker, system monitor, workspace overview / animations, power profiles.
 
 ---
 
-## 9. Plugin System
+## 8. D-Bus and system integration (`internal/adapters/dbus`)
 
-- [ ] **PLG-00** (P0) **تصمیم نهایی v1:** پیشنهاد = سیستم plugin خارجی در v1 **غیرفعال**؛ فقط built-in. ثبت در ADR و `RELEASE_SCOPE.md`. ✅ کد لود third-party در build v1 وجود نداشته باشد (یا پشت build tag `plugins`).
-- [ ] **PLG-01** (P2) اگر فعال شد: manifest نسخه‌دار + schema، permission model، اعتماد/امضا، resource limit، sandbox (bubblewrap/landlock/seccomp) با مرز امنیتی واقع‌بینانه مستند.
-- [ ] **PLG-02** (P2) SDK و plugin نمونه، تست plugin مخرب/خراب، تست سازگاری API.
-- [ ] **PLG-03** (P1) `plugins.yaml` در v1 اگر پر شد: plugin ناشناس = رد با پیام واضح.
+- [ ] **DBUS-01** (P0/P1) Choose a library (`godbus/dbus/v5`) + wrapper with reconnect/timeout and a split between session and system bus. A "which service uses which bus" table in `docs/architecture/dbus.md`.
+- [ ] **DBUS-02** (P1) Fake bus for tests (or `dbus-run-session` in e2e).
+- [ ] **DBUS-03** (P1) Validate D-Bus inputs (size/type/UTF-8).
+- [ ] **DBUS-04** (P1) polkit/logind for power: least privilege, no `sudo`.
+- [ ] **DBUS-05** (P2) D-Bus service file for activation (if needed). (⛓ PKG-05)
+- [ ] **DBUS-06** (P1) Test in an incomplete session (no UPower/NM/…).
+
+---
+
+## 9. Plugin system
+
+- [ ] **PLG-00** (P0) **Final v1 decision:** suggested = external plugins **disabled** in v1; built-ins only. Record in an ADR and in `RELEASE_SCOPE.md`. ✅ No third-party loading code in the v1 build (or put it behind a `plugins` build tag).
+- [ ] **PLG-01** (P2) If enabled: versioned manifest + schema, permission model, trust/signing, resource limits, sandbox (bubblewrap/landlock/seccomp) with the real security boundary documented honestly.
+- [ ] **PLG-02** (P2) SDK and sample plugin, tests for malicious/broken plugins, API compatibility tests.
+- [ ] **PLG-03** (P1) If `plugins.yaml` is filled in v1: unknown plugin = rejected with a clear message.
 
 ---
 
 ## 10. Storage
 
-- [ ] **STO-00** (P0) تصمیم: کدام داده‌ها persistent‌اند؟ (پیشنهاد v1: فقط state کوچک؛ شاید حتی بدون SQLite و با JSON atomic). اگر SQLite لازم نیست، آن را از README/معماری حذف یا به v1.x منتقل کن.
-- [ ] **STO-01** (P1) اگر لازم: SQLite pure-Go (`modernc.org/sqlite`، بدون CGO)، WAL، `0600`، migration نسخه‌دار (`internal/storage/migrations`)، repository interface.
-- [ ] **STO-02** (P1) خرابی DB/migration ناموفق: backup خودکار، `quarantine`، راه‌اندازی با DB تازه + هشدار؛ تست.
-- [ ] **STO-03** (P1) سیاست retention/پاک‌سازی cache و history؛ بدون ذخیرهٔ داده حساس.
-- [ ] **STO-04** (P1) backup/restore: `i3-nextctl backup|restore` (config + state).
+- [ ] **STO-00** (P0) Decide which data really needs to persist. (Suggestion for v1: only small state, maybe even without SQLite, using atomic JSON.) If SQLite is not needed, remove it from the README/architecture or move it to v1.x.
+- [ ] **STO-01** (P1) If needed: pure-Go SQLite (`modernc.org/sqlite`, no CGO), WAL, `0600`, versioned migrations (`internal/storage/migrations`), repository interface.
+- [ ] **STO-02** (P1) DB corruption / failed migration: automatic backup, `quarantine`, start with a fresh DB and a warning; tests.
+- [ ] **STO-03** (P1) Retention/cleanup policy for cache and history; do not store sensitive data.
+- [ ] **STO-04** (P1) Backup/restore: `i3-nextctl backup|restore` (config + state).
 
 ---
 
-## 11. Security و Privacy
+## 11. Security and privacy
 
-- [ ] **SEC-01** (P0) `docs/SECURITY.md` (threat model): دارایی‌ها، مرزهای اعتماد (socket، D-Bus، config، child processes، plugin)، STRIDE خلاصه، فرضیات.
-- [ ] **SEC-02** (P0) بازبینی permission همهٔ فایل/socket/lock (⛓ FIX-07, API-02) با تست خودکار.
-- [ ] **SEC-03** (P0) Path traversal/symlink: باز کردن فایل‌ها با `os.Root`/`openat2(RESOLVE_BENEATH)` یا بررسی `EvalSymlinks` + owner؛ برای config/asset/desktop-entry.
-- [ ] **SEC-04** (P0) Lint امنیتی: `gosec` فعال است؛ نتایج بدون `//nolint` بی‌دلیل. اضافه‌کردن `govulncheck` (⛓ FIX-12).
-- [ ] **SEC-05** (P0) Input validation مرکزی برای IPC/D-Bus/config؛ fuzz روی parserها.
-- [ ] **SEC-06** (P0) Logها بدون secret/مسیر شخصی (redaction helper + تست).
-- [ ] **SEC-07** (P0) Lock fail-closed (⛓ SVC-07).
-- [ ] **SEC-08** (P1) Hardening systemd user unit (`NoNewPrivileges`, `ProtectSystem`, … در حد سازگار با نشست).
-- [ ] **SEC-09** (P1) Supply chain: پین کردن actions/ابزارها، `go mod verify`، SBOM، امضای release (cosign/minisign)، build قابل تکرار (`-trimpath` موجود است).
-- [ ] **SEC-10** (P1) `THIRD_PARTY_LICENSES.md` (تولید با `go-licenses`) و بررسی سازگاری مجوز.
-- [ ] **SEC-11** (P0) سیاست telemetry: **هیچ** (مستند در README/PRIVACY.md).
-- [ ] **SEC-12** (P1) فرایند افشای آسیب‌پذیری: ایمیل/Private reporting واقعاً فعال باشد (در `SECURITY.md` هنوز «TBD‌گونه» است).
-
----
-
-## 12. Logging، Diagnostics، Observability
-
-- [ ] **OBS-01** (P0) Logger: فیلدهای ثابت `component`, `version`, `commit`, `session_id`؛ خروجی به journald (stderr با فرمت journald یا `slog` handler) در نشست واقعی و فایل در `state_dir/logs/` در حالت dev؛ rotation/سقف (`lumberjack` یا تکیه بر journald).
-- [ ] **OBS-02** (P1) سطح log از config و runtime (`i3-nextctl log-level`)؛ `AddSource` فقط debug (موجود است).
-- [ ] **OBS-03** (P1) خطاهای actionable (کلید `hint=`) جدا از خطاهای عادی.
-- [ ] **OBS-04** (P0) `i3-next-doctor` بازنویسی: چک‌ها با ساختار `{id,status,detail,remedy}`؛ پوشش: Sway(+نسخه)، Quickshell(+نسخه)، Qt6، Wayland env، D-Bus session/system، ابزارهای اختیاری (swaylock, grim, wpctl, …)، permission دایرکتوری‌ها، config معتبر، socket API؛ `--json`؛ exit code (0 OK، 1 WARN با `--strict`، 2 FAIL). ✅ e2e `t_doctor_*`.
-- [ ] **OBS-05** (P0) `i3-nextctl`: کلاینت واقعی API؛ دستورات `status`, `stop`, `restart`, `config validate`, `services`, `log-level`؛ خروجی `--json`؛ exit code استاندارد؛ دستور فعلی `status` که رشتهٔ ثابت چاپ می‌کند حذف شود. ✅ e2e: با daemon در حال اجرا `status` ⟵ `running`.
-- [ ] **OBS-06** (P1) `i3-nextctl diagnostics bundle` با redact مسیر/نام کاربر/IP.
-- [ ] **OBS-07** (P2) متریک داخلی ساده (counter/gauge در `status`) بدون export شبکه.
+- [ ] **SEC-01** (P0) `docs/SECURITY.md` (threat model): assets, trust boundaries (socket, D-Bus, config, child processes, plugins), short STRIDE, assumptions.
+- [ ] **SEC-02** (P0) Review permissions of all files/sockets/locks with automatic tests. (⛓ FIX-07, API-02)
+- [ ] **SEC-03** (P0) Path traversal / symlinks: open files with `os.Root` / `openat2(RESOLVE_BENEATH)` or check `EvalSymlinks` + owner; for config, assets, and desktop entries.
+- [ ] **SEC-04** (P0) Security lint: `gosec` is on; no pointless `//nolint`. Add `govulncheck`. (⛓ FIX-12)
+- [ ] **SEC-05** (P0) Central input validation for IPC/D-Bus/config; fuzz the parsers.
+- [ ] **SEC-06** (P0) No secrets or personal paths in logs (redaction helper + test).
+- [ ] **SEC-07** (P0) Lock fails closed. (⛓ SVC-07)
+- [ ] **SEC-08** (P1) Harden the systemd user unit (`NoNewPrivileges`, `ProtectSystem`, … as far as the session allows).
+- [ ] **SEC-09** (P1) Supply chain: pin actions/tools, `go mod verify`, SBOM, release signing (cosign/minisign), reproducible builds (`-trimpath` is already used).
+- [ ] **SEC-10** (P1) `THIRD_PARTY_LICENSES.md` (generated with `go-licenses`) and a license compatibility check.
+- [ ] **SEC-11** (P0) Telemetry policy: **none** (documented in README/PRIVACY.md).
+- [ ] **SEC-12** (P1) Vulnerability disclosure process: the email / private reporting must really work (the current `SECURITY.md` is vague).
 
 ---
 
-## 13. Session، Login و مدیریت نشست
+## 12. Logging, diagnostics, observability
+
+- [ ] **OBS-01** (P0) Logger with fixed fields `component`, `version`, `commit`, `session_id`; output to journald in a real session and to `state_dir/logs/` in dev mode; rotation/size cap (`lumberjack`, or rely on journald).
+- [ ] **OBS-02** (P1) Log level from config and at runtime (`i3-nextctl log-level`); `AddSource` only in debug (already done).
+- [ ] **OBS-03** (P1) Actionable errors (a `hint=` key) separate from normal errors.
+- [ ] **OBS-04** (P0) Rewrite `i3-next-doctor`: checks use the shape `{id,status,detail,remedy}`; cover Sway (+version), Quickshell (+version), Qt6, Wayland env, D-Bus session/system, optional tools (swaylock, grim, wpctl, …), directory permissions, valid config, API socket; `--json`; exit codes (0 OK, 1 WARN with `--strict`, 2 FAIL). ✅ e2e `t_doctor_*`.
+- [ ] **OBS-05** (P0) `i3-nextctl`: a real API client; commands `status`, `stop`, `restart`, `config validate`, `services`, `log-level`; `--json` output; standard exit codes; remove the current `status` that prints a fixed string. ✅ e2e: with the daemon running, `status` ⟵ `running`.
+- [ ] **OBS-06** (P1) `i3-nextctl diagnostics bundle` with paths/user name/IP redacted.
+- [ ] **OBS-07** (P2) Simple internal metrics (counter/gauge in `status`) with no network export.
+
+---
+
+## 13. Session, login, and session management
 
 - [ ] **SES-01** (P0) `packaging/wayland-sessions/i3-next.desktop` (`Exec=i3-next-session`, `Type=Application`).
-- [ ] **SES-02** (P0) `i3-next-session` واقعی: تنظیم env (`XDG_CURRENT_DESKTOP=i3-next:sway`, `XDG_SESSION_TYPE=wayland`, `XDG_SESSION_DESKTOP`, `MOZ_ENABLE_WAYLAND`, `QT_QPA_PLATFORM`…)، `dbus-update-activation-environment --systemd`، `systemctl --user import-environment`، اجرای Sway، و سپس `i3-nextd`/Quickshell با ترتیب مشخص. استفاده از `systemd --user` targetها (`i3-next-session.target`) توصیه می‌شود. ✅
-- [ ] **SES-03** (P0) جلوگیری از اجرای تکراری (lock/`systemctl --user` unit واحد).
-- [ ] **SES-04** (P0) خطای startup: پیام، لاگ در `state_dir/logs/session-*.log`، fallback به یک TTY/foot و مستند recovery. ✅ تست با daemon خراب.
-- [ ] **SES-05** (P0) Logout تمیز: توقف سرویس‌ها (ترتیب معکوس)، `swaymsg exit`، پاک‌سازی socket/lock.
-- [ ] **SES-06** (P1) Restart shell بدون logout (`i3-nextctl shell restart`).
-- [ ] **SES-07** (P1) Suspend/resume و lock-before-sleep (logind inhibitor)؛ تست دستی در QA.
-- [ ] **SES-08** (P1) مستند اجرای dev (nested Sway) و اجرای واقعی (DM).
-- [ ] **SES-09** (P0) تست VM: `make vm-gui` سشن کامل (autologin) بدون دخالت دستی بالا بیاید و اسکرین‌شات ثبت شود.
+- [ ] **SES-02** (P0) Real `i3-next-session`: set env (`XDG_CURRENT_DESKTOP=i3-next:sway`, `XDG_SESSION_TYPE=wayland`, `XDG_SESSION_DESKTOP`, `MOZ_ENABLE_WAYLAND`, `QT_QPA_PLATFORM`…), run `dbus-update-activation-environment --systemd`, `systemctl --user import-environment`, start Sway, then `i3-nextd` / Quickshell in a fixed order. Using `systemd --user` targets (`i3-next-session.target`) is recommended. ✅
+- [ ] **SES-03** (P0) Prevent duplicate starts (lock / one `systemctl --user` unit).
+- [ ] **SES-04** (P0) Startup failure: show a message, log to `state_dir/logs/session-*.log`, fall back to a TTY/foot, and document recovery. ✅ Test with a broken daemon.
+- [ ] **SES-05** (P0) Clean logout: stop services (reverse order), `swaymsg exit`, remove socket/lock.
+- [ ] **SES-06** (P1) Restart the shell without logging out (`i3-nextctl shell restart`).
+- [ ] **SES-07** (P1) Suspend/resume and lock-before-sleep (logind inhibitor); manual test in QA.
+- [ ] **SES-08** (P1) Document dev mode (nested Sway) and real mode (display manager).
+- [ ] **SES-09** (P0) VM test: `make vm-gui` brings up a full session (autologin) with no manual steps, and a screenshot is saved.
 
 ---
 
-## 14. Packaging و نصب
+## 14. Packaging and install
 
-### 14.1 Build/Release
-- [ ] **PKG-01** (P0) `make build` تنها منبع build؛ `scripts/build.sh` حذف یا فقط wrapper؛ `make install DESTDIR=… PREFIX=…` استاندارد (باینری، configs، QML، session، docs).
-- [ ] **PKG-02** (P0) ldflags یکسان از `internal/version` (⛓ FIX-04). ✅ `i3-nextd --version` شامل commit و date واقعی (نه `dev/unknown`) در release.
-- [ ] **PKG-03** (P1) build debug/release جدا؛ `-trimpath`، `CGO_ENABLED=0` در release.
-- [ ] **PKG-04** (P1) SBOM (`syft`/`cyclonedx-gomod`)، checksum، امضا.
+### 14.1 Build / release
+- [ ] **PKG-01** (P0) `make build` is the only build source; remove `scripts/build.sh` or make it a thin wrapper; standard `make install DESTDIR=… PREFIX=…` (binaries, configs, QML, session, docs).
+- [ ] **PKG-02** (P0) Same ldflags from `internal/version`. (⛓ FIX-04) ✅ In a release, `i3-nextd --version` shows the real commit and date (not `dev/unknown`).
+- [ ] **PKG-03** (P1) Separate debug/release builds; `-trimpath`, `CGO_ENABLED=0` for release.
+- [ ] **PKG-04** (P1) SBOM (`syft` / `cyclonedx-gomod`), checksums, signing.
 
-### 14.2 بسته‌ها
-- [ ] **PKG-10** (P0) `.deb` برای Ubuntu 24.04 و Debian 13 (`packaging/debian/`): `Depends` (sway, quickshell\*, qt6 runtime, dbus-user-session, …)، `Recommends` (pipewire, network-manager, upower, swaylock, swayidle, grim, slurp, wl-clipboard)، `lintian` تمیز. ✅ نصب روی VM تمیز هر دو توزیع. (\*Quickshell ممکن است در Ubuntu 24.04 نباشد ⟵ تصمیم: PPA/backport/vendoring و ثبت در docs.)
-- [ ] **PKG-11** (P0) postinst/prerm: بدون لمس config کاربر؛ upgrade حافظ config؛ purge فقط با رضایت.
-- [ ] **PKG-12** (P1) systemd user units و dbus/polkit فایل‌ها.
-- [ ] **PKG-13** (P2) PKGBUILD (Arch، best-effort).
-- [ ] **PKG-14** (P1) آزمون خودکار نصب/ارتقا/حذف روی VM (⛓ QA-05).
-- [ ] **PKG-15** (P1) تصمیم و مستند: نصب از repository (APT repo/Release assets) یا آفلاین.
+### 14.2 Packages
+- [ ] **PKG-10** (P0) `.deb` for Ubuntu 24.04 and Debian 13 (`packaging/debian/`): `Depends` (sway, quickshell\*, qt6 runtime, dbus-user-session, …), `Recommends` (pipewire, network-manager, upower, swaylock, swayidle, grim, slurp, wl-clipboard), clean `lintian`. ✅ Installs on a clean VM of both distros. (\*Quickshell may be missing on Ubuntu 24.04 ⟵ decide: PPA / backport / vendoring, and write it in the docs.)
+- [ ] **PKG-11** (P0) postinst/prerm: never touch user config; upgrade keeps config; purge only with consent.
+- [ ] **PKG-12** (P1) systemd user units and dbus/polkit files.
+- [ ] **PKG-13** (P2) PKGBUILD (Arch, best effort).
+- [ ] **PKG-14** (P1) Automatic install/upgrade/uninstall test on a VM. (⛓ QA-05)
+- [ ] **PKG-15** (P1) Decide and document: install from a repository (APT repo / release assets) or offline.
 
-### 14.3 Scriptها
-- [ ] **PKG-20** (P1) `scripts/dev-setup.sh` idempotent؛ `scripts/install.sh` با `--prefix`، `--dry-run`، بررسی پیش‌نیاز و **فقط فایل‌های متعلق** (manifest نصب)؛ `uninstall.sh` از همان manifest. ✅ shellcheck + تست مسیر با فاصله.
-- [ ] **PKG-21** (P1) هیچ اسکریپتی فایل کاربر را بدون backup overwrite نکند.
+### 14.3 Scripts
+- [ ] **PKG-20** (P1) `scripts/dev-setup.sh` is idempotent; `scripts/install.sh` has `--prefix`, `--dry-run`, checks prerequisites, and touches **only files it owns** (install manifest); `uninstall.sh` uses the same manifest. ✅ shellcheck + test with a path that has spaces.
+- [ ] **PKG-21** (P1) No script overwrites a user file without a backup.
 
 ---
 
-## 15. Testing و QA
+## 15. Testing and QA
 
 ### 15.1 Go
-- [ ] **QA-01** (P0) تست unit برای هر پکیج جدید (هدف: مسیرهای حیاتی core/config/api/sway ≥ 80% line، بیشتر تمرکز روی رفتار).
+- [ ] **QA-01** (P0) Unit tests for every new package (target: critical paths in core/config/api/sway ≥ 80% line coverage; focus on behavior).
 - [ ] **QA-02** (P0) `go test -race -count=1 ./...` + `goleak`.
-- [ ] **QA-03** (P1) Fuzz: IPC framing، JSON-RPC، config parser، desktop entry parser.
-- [ ] **QA-04** (P1) رفع flakyها (`-count=20` در nightly).
+- [ ] **QA-03** (P1) Fuzz: IPC framing, JSON-RPC, config parser, desktop entry parser.
+- [ ] **QA-04** (P1) Fix flaky tests (`-count=20` in nightly).
 
-### 15.2 Integration/E2E (روی بنیان `tests/e2e/run.sh`)
-- [ ] **QA-05** (P0) تست‌های جدید e2e: daemon+Sway اتصال/reconnect، `nextctl status` واقعی، socket permission، config خراب، لاگین کامل DM (VM GUI)، logout، crash daemon/shell/lock، چندمانیتوره/scale، نبود optional deps، upgrade/uninstall، نصب `.deb`.
-- [ ] **QA-06** (P1) اجرای e2e در CI (runner با `/dev/kvm` یا headless-only بدون VM برای subset) + آپلود artifactها (`tests/vm/.state/artifacts`).
-- [ ] **QA-07** (P1) تست طولانی (soak ≥ 8h) با اندازه‌گیری RSS/FD/goroutine.
-- [ ] **QA-08** (P1) ماتریس VM: Debian 13 و Ubuntu 24.04 (ایمیج دوم در `vm.sh`).
+### 15.2 Integration / E2E (building on `tests/e2e/run.sh`)
+- [ ] **QA-05** (P0) New e2e tests: daemon+Sway connect/reconnect, real `nextctl status`, socket permissions, broken config, full display-manager login (VM GUI), logout, crash of daemon/shell/lock, multi-monitor/scale, missing optional deps, upgrade/uninstall, `.deb` install.
+- [ ] **QA-06** (P1) Run e2e in CI (a runner with `/dev/kvm`, or a headless-only subset without a VM) + upload artifacts (`tests/vm/.state/artifacts`).
+- [ ] **QA-07** (P1) Long soak test (≥ 8h) measuring RSS/FD/goroutines.
+- [ ] **QA-08** (P1) VM matrix: Debian 13 and Ubuntu 24.04 (a second image in `vm.sh`).
 
 ### 15.3 Manual QA
-- [ ] **QA-10** (P0) `docs/development/qa-checklist.md`: keyboard/mouse/touchpad/چندمانیتوره، sleep/resume، قطع/وصل شبکه، تغییر دستگاه صدا، برنامه‌های GTK/Qt/Electron، notification انبوه، recovery از config/daemon/UI خراب.
-- [ ] **QA-11** (P0) حداقل یک چرخهٔ استفادهٔ روزمره روی سخت‌افزار واقعی (نتیجه در `docs/release/rc-report.md`).
+- [ ] **QA-10** (P0) `docs/development/qa-checklist.md`: keyboard/mouse/touchpad/multi-monitor, sleep/resume, network connect/disconnect, audio device change, GTK/Qt/Electron apps, many notifications, recovery from broken config/daemon/UI.
+- [ ] **QA-11** (P0) At least one full day-to-day use cycle on real hardware (result in `docs/release/rc-report.md`).
 
 ---
 
-## 16. Performance و Reliability
+## 16. Performance and reliability
 
-- [ ] **PERF-01** (P1) Baseline و بودجه (ثبت در `docs/release/performance.md`): login→desktop آماده ≤ 5s، RAM idle daemon ≤ 50 MiB، shell ≤ 250 MiB، CPU idle < 2%.
-- [ ] **PERF-02** (P1) اندازه‌گیری startup هر مولفه (trace اوقات در log).
-- [ ] **PERF-03** (P1) Debounce/throttle eventهای پرتکرار (`window::title`, `input`) با حفظ eventهای ضروری.
-- [ ] **PERF-04** (P1) سقف حافظه برای صف‌ها/cache (⛓ CORE-21).
-- [ ] **PERF-05** (P1) تست disk-full، EACCES، process hang، سوکت پر.
-- [ ] **PERF-06** (P1) بنچمارک `go test -bench` برای event bus/state/IPC parser و ثبت baseline در CI (هشدار regression).
+- [ ] **PERF-01** (P1) Baseline and budget (in `docs/release/performance.md`): login→desktop ready ≤ 5s, idle daemon RAM ≤ 50 MiB, shell ≤ 250 MiB, idle CPU < 2%.
+- [ ] **PERF-02** (P1) Measure startup time of each component (trace timings in the log).
+- [ ] **PERF-03** (P1) Debounce/throttle frequent events (`window::title`, `input`) without losing essential events.
+- [ ] **PERF-04** (P1) Memory limits for queues/caches. (⛓ CORE-21)
+- [ ] **PERF-05** (P1) Tests for disk full, EACCES, process hang, full socket.
+- [ ] **PERF-06** (P1) `go test -bench` benchmarks for event bus/state/IPC parser, with a baseline in CI (warn on regression).
 
 ---
 
-## 17. مستندات
+## 17. Documentation
 
-- [ ] **DOC-01** (P0) README: وضعیت واقعی، دستورات نصب per-distro (Ubuntu 24.04 / Debian 13)، لیست وابستگی کامل (شامل `foot`, `jq`, `rsync`) هم‌خوان با `guest-provision.sh`، build/run/test، لینک KVM lab.
-- [ ] **DOC-02** (P0) `docs/user-guide/`: نصب، انتخاب سشن از DM، اولین اجرا، کلیدهای میانبر، config.
-- [ ] **DOC-03** (P0) `docs/troubleshooting.md` + `docs/recovery.md` (config خراب، daemon نمی‌آید، UI سیاه، بازگشت به Sway خام).
-- [ ] **DOC-04** (P1) `docs/api/` و `docs/config/` (⛓ API-10, CFG-11).
+- [ ] **DOC-01** (P0) README: real status, install commands per distro (Ubuntu 24.04 / Debian 13), full dependency list (including `foot`, `jq`, `rsync`) matching `guest-provision.sh`, build/run/test, link to the KVM lab.
+- [ ] **DOC-02** (P0) `docs/user-guide/`: install, choosing the session in the display manager, first run, shortcuts, config.
+- [ ] **DOC-03** (P0) `docs/troubleshooting.md` + `docs/recovery.md` (broken config, daemon will not start, black UI, going back to plain Sway).
+- [ ] **DOC-04** (P1) `docs/api/` and `docs/config/`. (⛓ API-10, CFG-11)
 - [ ] **DOC-05** (P1) Backup/restore/upgrade/uninstall.
-- [ ] **DOC-06** (P1) ADRها (`docs/architecture/adr/`) برای تصمیم‌های RPC، plugin، storage، session.
-- [ ] **DOC-07** (P1) به‌روزرسانی `OVERVIEW.md` با دیاگرام واقعی و اصل «Core مستقل از UI».
-- [ ] **DOC-08** (P1) Screenshotهای واقعی UI (از `vm.sh screenshot`) و Known Issues.
-- [ ] **DOC-09** (P2) راهنمای plugin فقط در صورت فعال شدن PLG.
+- [ ] **DOC-06** (P1) ADRs (`docs/architecture/adr/`) for the RPC, plugin, storage, and session decisions.
+- [ ] **DOC-07** (P1) Update `OVERVIEW.md` with a real diagram and the "Core does not depend on UI" rule.
+- [ ] **DOC-08** (P1) Real UI screenshots (from `vm.sh screenshot`) and Known Issues.
+- [ ] **DOC-09** (P2) Plugin guide, only if plugins are enabled.
 
 ---
 
-## 18. CI/CD و Release Engineering
+## 18. CI/CD and release engineering
 
-- [ ] **CI-01** (P0) CI فعلی تقویت شود (⛓ FIX-12): ماتریس، cache، pin، `govulncheck`، `qmllint` واقعی، shellcheck.
-- [ ] **CI-02** (P1) Job build روی Ubuntu 24.04 و Debian 13 (container) و بسته‌سازی `.deb` به‌عنوان artifact.
-- [ ] **CI-03** (P1) Job e2e/VM (self-hosted یا nightly) (⛓ QA-06).
-- [ ] **CI-04** (P0) Workflow release روی tag `vX.Y.Z`: build، تست، `.deb`، checksum، SBOM، امضا، GitHub Release با changelog.
-- [ ] **CI-05** (P1) Dependabot/Renovate برای Go modules و Actions.
-- [ ] **CI-06** (P1) بررسی Conventional Commits یا تولید changelog خودکار.
-- [ ] **CI-07** (P0) RC (`v1.0.0-rc.N`) پیش از نهایی؛ مستند rollback/نصب نسخهٔ قبل.
-- [ ] **CI-08** (P1) Branch protection: PR الزامی، CI سبز، حداقل یک review.
-
----
-
-## 19. Release Gate --- چک‌لیست نهایی
-
-> همهٔ موارد باید همزمان برقرار باشند. هر مورد به تست خودکار یا QA ثبت‌شده لینک شود.
-
-- [ ] نصب `.deb` روی سیستم تمیز Ubuntu 24.04 **و** Debian 13 موفق (QA-05/PKG-14)
-- [ ] ورود از DM به سشن i3_next؛ Sway+daemon+Quickshell خودکار (SES-09)
-- [ ] پنل و launcher قابل استفاده (UI-10/11)
-- [ ] مدیریت پنجره/workspace و چندمانیتوره (SWAY-20..22)
-- [ ] Notificationها (SVC-03/UI-13)
-- [ ] گزارش درست صدا/شبکه/باتری (SVC-04..06)
-- [ ] lock/logout/reboot/shutdown مسیر امن؛ lock fail-closed (SVC-07, SES-05)
-- [ ] قطع backend ⟵ UI نمی‌میرد و reconnect می‌شود (UI-01, API-09)
-- [ ] config خراب ⟵ بدون از دست رفتن نشست و restart-loop (CFG-07)
-- [ ] uninstall/upgrade داده کاربر را حذف نمی‌کنند (PKG-11)
-- [ ] CI سبز؛ هیچ باگ blocker/critical باز نیست
-- [ ] `govulncheck` و dependency scan بدون یافتهٔ بحرانی (SEC-04)
-- [ ] مستندات نصب/عیب‌یابی/recovery منتشر شده (DOC-01..03)
-- [ ] نسخه/commit/تاریخ/changelog در artifactها (PKG-02)
-- [ ] RC روی سخت‌افزار واقعی تست و ثبت شده (QA-11)
-- [ ] Known Issues و مسیر گزارش باگ منتشر شده (DOC-08, SEC-12)
+- [ ] **CI-01** (P0) Strengthen the current CI (⛓ FIX-12): matrix, cache, pinning, `govulncheck`, real `qmllint`, shellcheck.
+- [ ] **CI-02** (P1) Build job on Ubuntu 24.04 and Debian 13 (containers) and build the `.deb` as an artifact.
+- [ ] **CI-03** (P1) e2e/VM job (self-hosted or nightly). (⛓ QA-06)
+- [ ] **CI-04** (P0) Release workflow on tag `vX.Y.Z`: build, test, `.deb`, checksums, SBOM, signing, GitHub Release with changelog.
+- [ ] **CI-05** (P1) Dependabot/Renovate for Go modules and Actions.
+- [ ] **CI-06** (P1) Conventional Commits check or automatic changelog.
+- [ ] **CI-07** (P0) A release candidate (`v1.0.0-rc.N`) before the final; document rollback / installing the previous version.
+- [ ] **CI-08** (P1) Branch protection: PRs required, CI green, at least one review.
 
 ---
 
-## 20. Milestoneها با معیار خروج
+## 19. Release Gate — final checklist
 
-| # | Milestone | بخش‌ها | معیار خروج (قابل‌اندازه‌گیری) |
+> All items must be true at the same time. Link each item to an automatic test or recorded QA.
+
+- [ ] `.deb` installs on a clean Ubuntu 24.04 **and** Debian 13 system (QA-05 / PKG-14)
+- [ ] Login from the display manager into the i3_next session; Sway + daemon + Quickshell start automatically (SES-09)
+- [ ] Panel and launcher are usable (UI-10/11)
+- [ ] Window/workspace management and multi-monitor work (SWAY-20..22)
+- [ ] Notifications work (SVC-03 / UI-13)
+- [ ] Audio/network/battery are reported correctly (SVC-04..06)
+- [ ] Lock/logout/reboot/shutdown are safe; lock fails closed (SVC-07, SES-05)
+- [ ] If the backend disconnects the UI does not die and it reconnects (UI-01, API-09)
+- [ ] Broken config does not lose the session or cause a restart loop (CFG-07)
+- [ ] Uninstall/upgrade do not delete user data (PKG-11)
+- [ ] CI is green; no open blocker/critical bugs
+- [ ] `govulncheck` and dependency scan show no critical findings (SEC-04)
+- [ ] Install/troubleshooting/recovery docs are published (DOC-01..03)
+- [ ] Version/commit/date/changelog are visible in artifacts (PKG-02)
+- [ ] RC tested on real hardware and the result is recorded (QA-11)
+- [ ] Known Issues and the bug-report path are published (DOC-08, SEC-12)
+
+---
+
+## 20. Milestones with exit criteria
+
+| # | Milestone | Sections | Exit criteria (measurable) |
 |---|---|---|---|
-| M0 | Scope & Quick wins | 0، 1 (`FIX-*`) | تمام `FIX-*` با اولویت P0 بسته؛ `make`، `make check`، `make vm-test` سبز؛ نسخه واحد |
-| M1 | Core runtime | 2، 3، 12 | daemon با سرویس‌های fake: ترتیب/rollback/shutdown/supervisor/config تست‌شده؛ `nextctl status` واقعی |
-| M2 | Sway & API | 4، 5 | e2e: daemon ⟷ Sway headless، reconnect، JSON-RPC با version+peercred، contract tests |
-| M3 | First usable shell | 6، 7 (Must) | panel+launcher+session menu روی VM؛ چندمانیتوره؛ reconnect UI |
-| M4 | Session | 8، 13 | login از DM در VM بدون دخالت؛ logout تمیز؛ recovery مستند |
-| M5 | Persistence & Security | 10، 11 | threat model؛ permissionها؛ fuzz؛ lock fail-closed؛ `govulncheck` تمیز |
-| M6 | Packaging & Docs | 14، 17 | `.deb` نصب/ارتقا/حذف روی هر دو توزیع؛ مستندات کامل |
-| M7 | QA & Hardening | 15، 16 | soak ۸ ساعته بدون نشت؛ بودجهٔ performance؛ QA دستی |
-| M8 | RC & Release | 18، 19 | `v1.0.0-rc.N` ⟵ Release Gate کامل ⟵ `v1.0.0` |
+| M0 | Scope & quick wins | 0, 1 (`FIX-*`) | All P0 `FIX-*` closed; `make`, `make check`, `make vm-test` green; one version everywhere |
+| M1 | Core runtime | 2, 3, 12 | Daemon with fake services: order/rollback/shutdown/supervisor/config tested; real `nextctl status` |
+| M2 | Sway & API | 4, 5 | e2e: daemon ⟷ headless Sway, reconnect, JSON-RPC with version + peercred, contract tests |
+| M3 | First usable shell | 6, 7 (Must) | Panel + launcher + session menu on the VM; multi-monitor; UI reconnect |
+| M4 | Session | 8, 13 | Login from the DM in the VM with no manual steps; clean logout; recovery documented |
+| M5 | Persistence & security | 10, 11 | Threat model; permissions; fuzz; lock fails closed; clean `govulncheck` |
+| M6 | Packaging & docs | 14, 17 | `.deb` install/upgrade/uninstall on both distros; docs complete |
+| M7 | QA & hardening | 15, 16 | 8-hour soak with no leaks; performance budget; manual QA |
+| M8 | RC & release | 18, 19 | `v1.0.0-rc.N` ⟵ full Release Gate ⟵ `v1.0.0` |
 
-### ریسک‌های شناخته‌شده (پیگیری شوند)
-| ریسک | اثر | کاهش |
+### Known risks (track these)
+| Risk | Impact | Mitigation |
 |---|---|---|
-| Quickshell در Ubuntu 24.04/Debian 13 موجود نیست یا قدیمی است | بلاکر نصب Tier-1 | تصمیم زودهنگام: PPA/backport/vendoring؛ تست در VM در M3 |
-| نسخهٔ Go `1.27.3` ممکن است روی توزیع‌ها/CI در دسترس نباشد | بلاکر build | FIX-05 در M0 |
-| Lock screen ناامن/نمایشی | ریسک امنیتی | فقط swaylock/ext-session-lock + تست fail-closed |
-| دامنهٔ UI/سرویس‌ها بزرگ است | تأخیر | P1/P2 را در M3 دوباره اولویت‌بندی کن؛ سرویس‌های Must فقط بخش 7.2 با P0/P1 |
-| نبود runner با KVM در CI | e2e فقط محلی | subset headless بدون VM در CI + nightly خودمیزبان |
+| Quickshell is missing or old on Ubuntu 24.04 / Debian 13 | Tier-1 install blocker | Decide early: PPA / backport / vendoring; test in the VM in M3 |
+| Go `1.27.3` may not be available on distros/CI | Build blocker | FIX-05 in M0 |
+| Insecure or fake lock screen | Security risk | Only swaylock / ext-session-lock + fail-closed test |
+| UI/service scope is large | Delays | Re-prioritize P1/P2 in M3; Must services are only section 7.2 P0/P1 |
+| No KVM runner in CI | e2e only runs locally | Headless subset without a VM in CI + self-hosted nightly |
 
 ---
 
-## ثبت پیشرفت انتشار
+## Release progress log
 
-| مورد | مقدار |
+| Item | Value |
 |---|---|
 | Target version | `1.0.0` |
 | Current status | Planning → M0 (quick wins) |
@@ -431,4 +431,4 @@
 | Target distributions | Ubuntu LTS 24.04, Debian Stable 13 (amd64) |
 | Target release date | TBD |
 | Latest release candidate | TBD |
-| Known blockers | FIX-05 (نسخهٔ Go)، Quickshell روی Tier-1، تصمیم PLG-00/STO-00 |
+| Known blockers | FIX-05 (Go version), Quickshell on Tier-1, decisions on PLG-00 / STO-00 |
