@@ -33,3 +33,5 @@ config.local.yaml
 tmp/
 .cache/
 tmp*
+
+repomix-output.xml
