@@ -86,7 +86,7 @@ fi
 
 # ---------------------------------------------------------------------------
 step "apt: refresh package index"
-apt-get update -o Dpkg::Progress-Fancy=0
+apt-get update 2>&1 -o Dpkg::Progress-Fancy=0
 
 step "apt: check package availability"
 missing=()

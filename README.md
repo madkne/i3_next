@@ -15,7 +15,7 @@ with a Go-powered backend and a modern desktop shell.
 - JSON-RPC: Internal API
 - SQLite: Persistent Storage
 
-## Features
+## Planned Features (v1 scope — not yet implemented)
 
 - Window Management
 - Workspace Management

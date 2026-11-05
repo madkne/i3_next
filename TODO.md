@@ -14,13 +14,13 @@
 
 ## 0. تعریف محدوده و معیارهای انتشار
 
--   [ ] محدوده دقیق v1 را تثبیت کن؛ قابلیت‌های خارج از این محدوده به
+-   [x] محدوده دقیق v1 را تثبیت کن؛ قابلیت‌های خارج از این محدوده به
     backlog نسخه‌های بعد منتقل شوند.
--   [ ] توزیع‌های هدف را مشخص کن (پیشنهاد اولیه: Ubuntu LTS و Debian
+-   [x] توزیع‌های هدف را مشخص کن (پیشنهاد اولیه: Ubuntu LTS و Debian
     Stable؛ سایر توزیع‌ها best-effort).
--   [ ] معماری سخت‌افزار هدف را مشخص کن (حداقل x86_64؛ وضعیت ARM64 مستند
+-   [x] معماری سخت‌افزار هدف را مشخص کن (حداقل x86_64؛ وضعیت ARM64 مستند
     شود).
--   [ ] نسخه‌های پشتیبانی‌شده Sway، Wayland، Quickshell، Qt و Go را مشخص و
+-   [x] نسخه‌های پشتیبانی‌شده Sway، Wayland، Quickshell، Qt و Go را مشخص و
     در یک ماتریس سازگاری ثبت کن.
 -   [ ] حداقل سخت‌افزار، وابستگی‌های اجباری و اختیاری و فضای دیسک موردنیاز
     را مشخص کن.
@@ -578,7 +578,7 @@
   Target version             `1.0.0`
   Current status             Planning
   Release owner              TBD
-  Target distributions       TBD
+  Target distributions       Ubuntu LTS 24.04, Debian Stable 13 (amd64)
   Target release date        TBD
   Latest release candidate   TBD
   Known blockers             TBD
