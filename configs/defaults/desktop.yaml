@@ -1,0 +1,15 @@
+version: 1
+session:
+  name: i3_next
+  compositor: sway
+paths:
+  config_dir: ~/.config/i3-next
+  data_dir: ~/.local/share/i3-next
+  state_dir: ~/.local/state/i3-next
+  cache_dir: ~/.cache/i3-next
+logging:
+  level: info
+  format: text
+ui:
+  shell: quickshell
+  theme: default

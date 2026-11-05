@@ -1,0 +1,7 @@
+module i3_next
+Main 1.0 shell/Main.qml
+Shell 1.0 shell/Shell.qml
+Session 1.0 shell/Session.qml
+Backend 1.0 services/Backend.qml
+EventBridge 1.0 services/EventBridge.qml
+Settings 1.0 services/Settings.qml

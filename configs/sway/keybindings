@@ -1,0 +1,6 @@
+set $mod Mod4
+
+bindsym $mod+Return exec foot
+bindsym $mod+d exec i3-nextctl launcher
+bindsym $mod+Shift+q kill
+bindsym $mod+Shift+e exec i3-nextctl session logout

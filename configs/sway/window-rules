@@ -1,0 +1,2 @@
+for_window [app_id=".*"] border pixel 2
+default_border pixel 2

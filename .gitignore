@@ -36,3 +36,13 @@ tmp*
 
 repomix-output.xml
 tests/vm/.state/
+# QML / Quickshell
+*.qmlc
+qmldir.cache
+
+# Coverage
+coverage.out
+*.coverprofile
+
+# OS / misc
+*.tmp
