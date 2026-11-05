@@ -11,6 +11,8 @@ LDFLAGS := -s -w \
 	-X main.buildDate=$(BUILD_DATE) \
 	-X main.commit=$(COMMIT)
 
+-include tests/vm/vm.mk
+
 .PHONY: all build test vet fmt clean run check
 
 all: check build

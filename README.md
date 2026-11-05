@@ -55,8 +55,19 @@ sudo apt install -y \
     pipewire \
     wireplumber \
     libwayland-dev \
-    wayland-protocols
+    wayland-protocols \
+    qemu-system-x86 libvirt-daemon-system virtinst virt-viewer genisoimage rsync
 
+    sudo usermod -aG libvirt,kvm $USER
+
+```
+
+2. for testing on kvm
+
+```bash
+make vm-up
+
+make vm-test
 ```
 
 ### Requirements
