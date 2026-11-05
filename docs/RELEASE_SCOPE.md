@@ -1,6 +1,6 @@
 # i3_next v1 Release Scope
 
-Status: Draft v1.0 (scope freeze candidate)
+Status: Final v1.0 (scope frozen)
 Target version: 1.0.0
 Last updated: 2026-11-05
 
@@ -67,6 +67,18 @@ entry; Sway, i3-nextd and Quickshell are started in a defined order by
 - Display-manager desktop entry, environment setup, recovery paths
 - Debian/Ubuntu packages, install/uninstall/upgrade preserving user data
 - Documentation, CI, diagnostics, manual QA checklist
+
+### 3.8 Per-capability acceptance criteria (testable)
+
+Each in-scope capability is considered done for v1 only when its criteria pass:
+
+- Core runtime: daemon starts/stops/reloads deterministically; single instance enforced; supervisor restarts failed children with backoff and no restart loop; event bus and state pass race tests.
+- Configuration: all four schemas validate; defaults installed on first run without overwriting user config; atomic writes; migration runs; invalid config degrades gracefully with actionable error.
+- Sway integration: IPC client connects via `SWAYSOCK`, reconnects with backoff; typed models parse real fixtures; generated Sway config validates via `sway --validate`; no silent overwrite of user config.
+- Core/Shell API: Unix socket + JSON-RPC with version check; permission-restricted socket; reconnect + state snapshot recovery; documented request/response/error contracts.
+- Desktop shell: panel renders clock/workspaces/network/audio/battery; launcher searches and safely executes desktop entries; notification popups + center work; control center adjusts audio/brightness/network/Bluetooth where supported; OSD shows; session status + logout/restart/shutdown actions work; multi-monitor panel lifecycle; reconnect to daemon.
+- System services: each service exposes status and degrades when its optional dependency is absent; lock screen uses a trusted tool; screenshot captures output/region; display service changes resolution/scale with validation; MPRIS controls work when a player exists.
+- Session/packaging/docs/tests: display-manager desktop entry logs in; env vars set; clean install/uninstall/upgrade preserve user data; doctor reports OK/WARN/FAIL with remediation; `i3-nextctl status` reads real API.
 
 ## 4. Out-of-scope (backlog for later releases)
 
