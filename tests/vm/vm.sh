@@ -80,6 +80,13 @@ ensure_running() {
   vm_running || cmd_start
 }
 
+ensure_provisioned() {
+  if ! vm_ssh "test -f /var/lib/i3-next-vm/provisioned" 2>/dev/null; then
+    warn "guest is not provisioned (an earlier provisioning run probably failed); provisioning now"
+    cmd_provision
+  fi
+}
+
 wait_for_ssh() {
   local timeout="${1:-240}" i ip
   log "waiting for SSH (up to ${timeout}s)"
@@ -249,18 +256,38 @@ cmd_create() {
 
 cmd_provision() {
   ensure_running
-  local goversion
+  local goversion logdir="$STATE_DIR/logs" logf rc=0
   goversion="$(awk '/^go /{print $2; exit}' "$REPO_ROOT/go.mod" 2>/dev/null || true)"
-  log "provisioning guest (Go ${goversion:-distro})"
-  vm_ssh "sudo cloud-init status --wait >/dev/null 2>&1 || true"
+  mkdir -p "$logdir"
+  logf="$logdir/provision-$(date +%Y%m%d-%H%M%S).log"
+  log "provisioning guest (Go ${goversion:-distro}); host log: $logf"
+  log "tip: PROVISION_DEBUG=1 vm.sh provision   for full shell tracing"
+  vm_ssh "sudo cloud-init status --wait --long 2>&1 || true"
   vm_ssh "cat > /tmp/provision.sh" <"$SCRIPT_DIR/guest-provision.sh"
-  vm_ssh "sudo env GO_VERSION='$goversion' DEV_USER='$VM_USER' INSTALL_QUICKSHELL='${INSTALL_QUICKSHELL:-1}' bash /tmp/provision.sh"
+  vm_ssh "sudo env GO_VERSION='$goversion' DEV_USER='$VM_USER' \
+    INSTALL_QUICKSHELL='${INSTALL_QUICKSHELL:-1}' PROVISION_DEBUG='${PROVISION_DEBUG:-0}' \
+    bash /tmp/provision.sh" 2>&1 | tee "$logf" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    warn "provisioning FAILED (exit $rc)"
+    warn "host log:  $logf"
+    warn "guest log: /var/log/i3-next-provision.log   (vm.sh logs)"
+    warn "last guest log lines:"
+    vm_ssh "sudo tail -n 25 /var/log/i3-next-provision.log" 2>&1 | sed 's/^/    | /' >&2 || true
+    die "provisioning failed"
+  fi
+}
+
+# Print the full provisioning log kept inside the guest.
+cmd_logs() {
+  ensure_running
+  vm_ssh "sudo cat /var/log/i3-next-provision.log"
 }
 
 cmd_up() {
   if ! vm_exists; then cmd_create
   elif ! vm_running; then cmd_start
   else wait_for_ssh 60; fi
+  ensure_provisioned
 }
 
 cmd_start() {
@@ -339,6 +366,7 @@ cmd_screenshot() {   # screenshot of the guest display (format is chosen by QEMU
 
 cmd_sync() {
   ensure_running
+  ensure_provisioned
   local ip; ip="$(vm_ip)"
   log "syncing repository to guest:~/i3-next"
   rsync -az --delete --filter=':- .gitignore' \
@@ -438,6 +466,7 @@ State
   snapshot [name]     offline snapshot (default: $SNAPSHOT_NAME)
   restore  [name]     revert and boot
   snapshots | artifacts | provision | image
+  logs                print the guest provisioning log (PROVISION_DEBUG=1 for set -x)
 
 Environment: VM_NAME VM_CPUS VM_RAM_MB VM_DISK_GB VM_GRAPHICS(spice|vnc|none)
              VM_GL=1 VM_POOL VM_NETWORK LIBVIRT_URI OUTPUTS INSTALL_QUICKSHELL=0
