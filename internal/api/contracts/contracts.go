@@ -3,9 +3,6 @@ package contracts
 // APIVersion is the version of the internal API contract.
 const APIVersion = "v1"
 
-// AppVersion is the application version.
-const AppVersion = "0.1.0"
-
 // HealthStatus represents a component health state.
 type HealthStatus string
 

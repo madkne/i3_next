@@ -11,6 +11,7 @@ import (
 
 	"i3_next/internal/app/bootstrap"
 	"i3_next/internal/core/logging"
+	"i3_next/internal/version"
 )
 
 func main() {
@@ -21,7 +22,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("i3_next %s (%s, %s)\n", VERSION, commit, buildDate)
+		fmt.Printf("i3_next %s (%s, %s)\n", version.Version, version.Commit, version.BuildDate)
 		return
 	}
 

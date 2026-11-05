@@ -73,6 +73,7 @@ t_version_flags() {
   "$BIN/i3-nextd" --version        | grep -q '^i3_next 0\.1'
   "$BIN/i3-nextctl" --version      | grep -q '^i3-nextctl 0\.1'
   "$BIN/i3-next-session" --version | grep -q '^i3-next-session 0\.1'
+  "$BIN/i3-next-doctor" --version  | grep -q '^i3-next-doctor 0\.1'
 }
 
 t_ctl_status() { "$BIN/i3-nextctl" status | grep -q 'i3_next: not connected'; }

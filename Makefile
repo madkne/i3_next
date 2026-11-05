@@ -13,8 +13,8 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 LDFLAGS := -s -w \
-	-X main.buildDate=$(BUILD_DATE) \
-	-X main.commit=$(COMMIT)
+	-X i3_next/internal/version.Commit=$(COMMIT) \
+	-X i3_next/internal/version.BuildDate=$(BUILD_DATE)
 
 .DEFAULT_GOAL := all
 

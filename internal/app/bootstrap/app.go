@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"i3_next/internal/core/config"
+	"i3_next/internal/version"
 )
 
 // Errors returned by the bootstrap package.
@@ -209,7 +210,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	logger.Info("starting i3_next desktop core",
-		slog.String("version", "0.1.0"),
+		slog.String("version", version.Version),
 		slog.Int("services", len(services)),
 	)
 

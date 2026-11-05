@@ -1,11 +1,22 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os/exec"
+
+	"i3_next/internal/version"
 )
 
 func main() {
+	showVersion := flag.Bool("version", false, "Show version")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("i3-next-doctor %s (%s, %s)\n", version.Version, version.Commit, version.BuildDate)
+		return
+	}
+
 	if _, err := exec.LookPath("sway"); err != nil {
 		fmt.Println("[FAIL] sway not found")
 	} else {
