@@ -20,7 +20,7 @@ LDFLAGS := -s -w \
 
 -include tests/vm/vm.mk
 
-.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint clean run check
+.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint naming check-naming clean run check
 
 all: check build
 
@@ -50,7 +50,12 @@ qmllint:
 test:
 	$(GO) test -race ./...
 
-check: fmt-check vet lint staticcheck test
+naming:
+	bash scripts/check-naming.sh
+
+check-naming: naming
+
+check: fmt-check vet lint staticcheck test naming
 
 build:
 	@mkdir -p $(BUILD_DIR)

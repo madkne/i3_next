@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -80,7 +81,7 @@ func runChecks() []check {
 		checks = append(checks, check{"sway", "fail", "sway not found", "Install sway (apt install sway)."})
 	} else {
 		detail := "sway installed"
-		if out, err := exec.Command("sway", "--version").CombinedOutput(); err == nil {
+		if out, err := exec.CommandContext(context.Background(), "sway", "--version").CombinedOutput(); err == nil {
 			detail = "sway installed (" + strings.TrimSpace(string(out)) + ")"
 		}
 		_ = p
@@ -92,7 +93,7 @@ func runChecks() []check {
 		checks = append(checks, check{"quickshell", "warn", "quickshell not found", "Install quickshell or build from source."})
 	} else {
 		detail := "quickshell installed"
-		if out, err := exec.Command("quickshell", "--version").CombinedOutput(); err == nil {
+		if out, err := exec.CommandContext(context.Background(), "quickshell", "--version").CombinedOutput(); err == nil {
 			detail = "quickshell installed (" + strings.TrimSpace(string(out)) + ")"
 		}
 		checks = append(checks, check{"quickshell", "ok", detail, ""})
