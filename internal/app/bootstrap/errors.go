@@ -16,9 +16,9 @@ var (
 
 // Dependency/topological sort errors.
 var (
-	ErrCycle               = errors.New("dependency cycle")
-	ErrDependencyCycle     = ErrCycle
-	ErrCircularDependency  = ErrCycle
-	ErrUnknownDependency   = errors.New("unknown dependency")
+	ErrCycle                = errors.New("dependency cycle")
+	ErrDependencyCycle      = ErrCycle
+	ErrCircularDependency   = ErrCycle
+	ErrUnknownDependency    = errors.New("unknown dependency")
 	ErrDuplicateServiceName = errors.New("duplicate service name")
 )

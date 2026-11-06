@@ -11,6 +11,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+import re
 
 LOG = Path("/var/log/i3-next-provision.log")
 DEV_USER = os.getenv("DEV_USER", "dev")
@@ -18,7 +19,7 @@ GO_VERSION = os.getenv("GO_VERSION", "")
 INSTALL_QUICKSHELL = os.getenv("INSTALL_QUICKSHELL", "1") == "1"
 DEBUG = os.getenv("PROVISION_DEBUG", "0") == "1"
 REQUIRED = [
-    "git", "curl", "ca-certificates", "build-essential", "pkg-config", "cmake",
+    "curl", "ca-certificates", "build-essential", "pkg-config", "cmake",
     "ninja-build", "make", "jq", "rsync", "file", "dbus", "dbus-user-session",
     "libpam-systemd", "sway", "swaybg", "swayidle", "swaylock", "waybar",
     "wl-clipboard", "grim", "slurp", "foot", "pipewire", "wireplumber",
@@ -108,8 +109,16 @@ def preflight():
 
 def install_packages():
     step("apt: refresh package index")
+    # Configure Debian repositories first.
+    configure_debian_repositories()
+    # Refresh package indexes.
     command(["apt-get", "update", "-o", "Dpkg::Progress-Fancy=0"], check=False)
     step("apt: check package availability")
+    # Install required packages.
+    install_required_packages()
+
+
+def install_required_packages():
     missing = []
     for package in REQUIRED:
         if command(["apt-cache", "show", package], check=False, capture=True):
@@ -131,43 +140,72 @@ def install_packages():
         else:
             warn(f"optional package skipped: {package}")
 
+def parse_go_version(text: str) -> tuple[int, ...]:
+    match = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", text)
+    if not match:
+        return ()
+    return tuple(int(x) for x in match.groups(default="0"))
+
+def installed_go_version() -> tuple[int, ...]:
+    go = shutil.which("go")
+    if not go:
+        return ()
+    return parse_go_version(command([go, "version"], check=False, capture=True))
+
 def install_go():
-    step("go: install toolchain")
-    if not GO_VERSION:
-        warn("go.mod version unknown, installing distro golang")
-        command(["apt-get", "install", "-y", "golang-go"])
-        return
-    version = GO_VERSION + ".0" if GO_VERSION.count(".") == 1 else GO_VERSION
-    info(f"wanted Go version: {version} (from go.mod: {GO_VERSION})")
-    go_bin = Path("/usr/local/go/bin/go")
-    if go_bin.exists() and command([go_bin, "version"], check=False, capture=True).find(f"go{version} ") >= 0:
-        info(f"Go {version} already installed")
-        return
-    arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
-    if not arch:
-        raise RuntimeError(f"unsupported architecture for Go download: {platform.machine()}")
-    url = f"https://go.dev/dl/go{version}.linux-{arch}.tar.gz"
-    archive = Path("/tmp/go.tgz")
-    info(f"downloading {url}")
-    urllib.request.urlretrieve(url, archive)
-    shutil.rmtree("/usr/local/go", ignore_errors=True)
-    command(["tar", "-C", "/usr/local", "-xzf", archive])
-    archive.unlink(missing_ok=True)
-    Path("/usr/local/bin").mkdir(parents=True, exist_ok=True)
+    step("go: install toolchain (from apt)")
+    required = parse_go_version(GO_VERSION) if GO_VERSION else ()
+    if required:
+        info(f"required Go version (from go.mod): {'.'.join(map(str, required))}")
+    else:
+        warn("go.mod version unknown; any Go from apt is accepted")
+
+    # Remove leftovers of the old tarball install: /usr/local/bin precedes
+    # /usr/bin in PATH, so a stale symlink would shadow the apt package.
     for binary in ("go", "gofmt"):
         link = Path("/usr/local/bin") / binary
-        link.unlink(missing_ok=True)
-        link.symlink_to(Path("/usr/local/go/bin") / binary)
-    info("installed: " + command([go_bin, "version"], capture=True))
+        if link.is_symlink() and str(link.resolve()).startswith("/usr/local/go"):
+            info(f"removing stale symlink {link}")
+            link.unlink()
+    if Path("/usr/local/go").exists():
+        info("removing old /usr/local/go")
+        shutil.rmtree("/usr/local/go", ignore_errors=True)
+
+    current = installed_go_version()
+    if current and current >= required:
+        info(f"Go already installed: {'.'.join(map(str, current))}")
+    else:
+        command(["apt-get", "install", "-y", "-o", "Dpkg::Progress-Fancy=0", "golang-go"])
+        current = installed_go_version()
+        if not current:
+            raise RuntimeError("golang-go installed but 'go' was not found in PATH")
+        if current < required:
+            raise RuntimeError(
+                f"apt provides Go {'.'.join(map(str, current))}, but go.mod needs "
+                f"{'.'.join(map(str, required))}. Lower the 'go' line in go.mod "
+                "or enable trixie-backports.")
+        info("installed: " + command(["go", "version"], capture=True))
+
+    # Never let `go` silently download a newer toolchain over the network.
+    command(["runuser", "-u", DEV_USER, "--", "env", f"HOME=/home/{DEV_USER}",
+             "go", "env", "-w", "GOTOOLCHAIN=local"])
+    info(f"GOTOOLCHAIN=local set for {DEV_USER}")
 
 def install_quickshell():
     step("quickshell: install (optional)")
     if not INSTALL_QUICKSHELL:
         info("skipped (INSTALL_QUICKSHELL=0)")
-    elif command(["apt-cache", "show", "quickshell"], check=False, capture=True):
-        command(["apt-get", "install", "-y", "-o", "Dpkg::Progress-Fancy=0", "quickshell"])
-    else:
+        return
+    if not command(["apt-cache", "show", "quickshell"], check=False, capture=True):
         warn("quickshell is not in apt repositories; install manually or build from source")
+        return
+    rc = command(["apt-get", "install", "-y", "-o", "Dpkg::Progress-Fancy=0", "quickshell"],
+                 check=False)
+    if rc != 0:
+        warn(f"quickshell install failed (apt exit {rc}); continuing without it")
+        warn("see: apt-get install -s quickshell  (usually unmet Qt6 dependencies)")
+        return
+    info("installed: " + command(["quickshell", "--version"], check=False, capture=True))
 
 def configure_session():
     step("session: environment, autologin and profile hook")
@@ -204,7 +242,7 @@ fi
 
 def verify():
     step("verify: required tools and versions")
-    required = ("sway", "swaymsg", "grim", "slurp", "foot", "jq", "rsync", "git", "make", "gcc", "go")
+    required = ("sway", "swaymsg", "grim", "slurp", "foot", "jq", "rsync", "make", "gcc", "go")
     missing = []
     for tool in required:
         path = shutil.which(tool)
@@ -223,6 +261,49 @@ def verify():
     marker = Path("/var/lib/i3-next-vm/provisioned")
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") + "\n")
+
+def configure_debian_repositories():
+    """Ensure Debian 13 (Trixie) repositories are configured."""
+
+    os_release = {}
+
+    for line in Path("/etc/os-release").read_text().splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            os_release[key] = value.strip().strip('"')
+
+    if os_release.get("ID") != "debian":
+        print("Skipping Debian repository configuration: not Debian")
+        return
+
+    codename = os_release.get("VERSION_CODENAME")
+
+    if codename != "trixie":
+        print(f"Skipping repository configuration for Debian {codename}")
+        return
+
+    sources = """\
+Types: deb
+URIs: https://deb.debian.org/debian
+Suites: trixie trixie-updates trixie-backports
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: https://security.debian.org/debian-security
+Suites: trixie-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+"""
+
+    sources_file = Path(
+        "/etc/apt/sources.list.d/debian.sources"
+    )
+
+    sources_file.write_text(sources)
+    sources_file.chmod(0o644)
+
+    print(f"Configured Debian repositories: {sources_file}")
 
 def main():
     check_root()
