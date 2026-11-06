@@ -84,7 +84,7 @@ make vm-test
 make build
 ```
 
-## Structure
+## Target structure (not yet created)
 
 ```text
 i3_next/

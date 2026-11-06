@@ -60,9 +60,9 @@
   - Add `concurrency: cancel-in-progress` and `timeout-minutes` to jobs.
   - The QML job uses `|| true`, so it is always green; it must really install `qmllint` or fail.
   - Add a Go version matrix (minimum and current).
-- [ ] **FIX-13** The README "Structure" section is the target layout, not the real one. ✅ Title it "Target structure (not yet created)" or show the real tree; also set `[x]` items in section 1 that are only skeletons (package layout, empty config/QML files) back to `[ ]`.
-- [ ] **FIX-14** (P1) `SECURITY.md` points to `docs/SECURITY.md`, which does not exist; `scripts/build.sh` is a second build source; `scripts/install.sh` installs only binaries (not config/QML/session). ✅ Make a final decision and align them. (⛓ PKG-01)
-- [ ] **FIX-15** `i3-next-doctor` always exits 0, even with `[FAIL]`. ✅ Non-zero exit on FAIL, `--json`, and a new e2e test. (⛓ OBS-04)
+- [x] **FIX-13** The README "Structure" section is the target layout, not the real one. ✅ Title it "Target structure (not yet created)" or show the real tree; also set `[x]` items in section 1 that are only skeletons (package layout, empty config/QML files) back to `[ ]`.
+- [x] **FIX-14** (P1) `SECURITY.md` points to `docs/SECURITY.md`, which does not exist; `scripts/build.sh` is a second build source; `scripts/install.sh` installs only binaries (not config/QML/session). ✅ Make a final decision and align them. (⛓ PKG-01)
+- [x] **FIX-15** `i3-next-doctor` always exits 0, even with `[FAIL]`. ✅ Non-zero exit on FAIL, `--json`, and a new e2e test. (⛓ OBS-04)
 - [ ] **FIX-16** (P1) One naming rule: `i3_next` (module/AppName) vs `i3-next` (dirs/binaries). ✅ Write it in `docs/development/naming.md` and add a script that checks it.
 
 ### Rest of section 1

@@ -85,6 +85,19 @@ t_ctl_unknown_command() {
 }
 
 t_doctor_sees_sway() { "$BIN/i3-next-doctor" | grep -q '\[OK\] sway installed'; }
+t_doctor_json() {
+  "$BIN/i3-next-doctor" --json | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+assert isinstance(d, list) and len(d) > 0
+ids = {c["id"] for c in d}
+assert "sway" in ids
+for c in d:
+    assert {"id", "status", "detail"} <= set(c.keys())
+    assert c["status"] in ("ok", "warn", "fail")
+'
+}
+t_doctor_exit_ok() { "$BIN/i3-next-doctor" >/dev/null 2>&1; }
 
 # ---- tests: Go quality gates ------------------------------------------------
 t_gofmt()  { local out; out="$(gofmt -l .)"; [ -z "$out" ] || { echo "needs gofmt:"; echo "$out"; return 1; }; }
@@ -163,6 +176,8 @@ run_test version_flags         t_version_flags
 run_test ctl_status            t_ctl_status
 run_test ctl_unknown_command   t_ctl_unknown_command
 run_test doctor_sees_sway      t_doctor_sees_sway
+run_test doctor_json            t_doctor_json
+run_test doctor_exit_ok         t_doctor_exit_ok
 
 echo "go quality gates"
 run_test gofmt                 t_gofmt

@@ -42,9 +42,7 @@ i3_next follows these practices in development:
 
 ## Threat model
 
-The v1 threat model is documented in `docs/SECURITY.md` (when available).
-Until that document is published, treat the daemon socket, configuration
-files, and plugin inputs as trusted-user-only surfaces.
+The v1 threat model is documented in `docs/SECURITY.md`.
 
 ## Disclosure
 

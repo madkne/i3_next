@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=i3_next
+Comment=Modern modular Wayland desktop environment
+Exec=i3-next-session
+Type=Application
+DesktopNames=i3-next
