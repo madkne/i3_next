@@ -85,10 +85,12 @@ type App struct {
 	runtimeDir      string
 	shutdownTimeout time.Duration
 
-	mu           sync.Mutex
-	running      bool
-	services     []any
-	startupHooks []func(context.Context) error
+	mu            sync.Mutex
+	running       bool
+	degraded      bool
+	healthFailure error
+	services      []any
+	startupHooks  []func(context.Context) error
 
 	lockFile *os.File
 }
@@ -138,6 +140,19 @@ func (a *App) AddStartupHook(fn func(context.Context) error) {
 	a.startupHooks = append(a.startupHooks, fn)
 }
 
+// Degraded reports whether the application is in a degraded state.
+func (a *App) Degraded() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.degraded
+}
+
+func (a *App) setDegraded(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.degraded = v
+}
+
 // Run bootstraps, runs, and shuts down the application.
 func (a *App) Run(ctx context.Context) error {
 	if ctx == nil {
@@ -154,6 +169,11 @@ func (a *App) Run(ctx context.Context) error {
 	hooks := append([]func(context.Context) error(nil), a.startupHooks...)
 	a.mu.Unlock()
 
+	a.setDegraded(false)
+	a.mu.Lock()
+	a.healthFailure = nil
+	a.mu.Unlock()
+
 	logger := a.logger
 
 	cleanup := func() {
@@ -162,8 +182,12 @@ func (a *App) Run(ctx context.Context) error {
 		a.mu.Unlock()
 	}
 
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+
 	// Bootstrap runtime directories.
 	if err := a.bootstrapDirs(); err != nil {
+		cancelRun()
 		cleanup()
 		return fmt.Errorf("%w: %v", ErrBootstrap, err)
 	}
@@ -191,28 +215,32 @@ func (a *App) Run(ctx context.Context) error {
 
 	// Run startup hooks.
 	for _, hook := range hooks {
-		if err := hook(ctx); err != nil {
+		if err := hook(runCtx); err != nil {
 			releaseLock()
+			cancelRun()
 			cleanup()
-			return fmt.Errorf("%w: startup hook: %v", ErrBootstrap, err)
+			return fmt.Errorf("%w: startup hook: %w", ErrBootstrap, err)
 		}
 	}
 
 	// Start services in registration order.
 	started := make([]int, 0, len(services))
 	for i, svc := range services {
-		ok, err := callLifecycle(ctx, svc, "Start")
+		ok, err := callLifecycle(runCtx, svc, "Start")
 		if err != nil {
 			// Roll back already started services.
 			for j := len(started) - 1; j >= 0; j-- {
 				idx := started[j]
-				stopCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
-				_, _ = callLifecycle(stopCtx, services[idx], "Stop")
-				cancel()
+				if rerr := a.stopService(services[idx], a.shutdownTimeout); rerr != nil {
+					logger.Error("rollback stop failed",
+						slog.String("service", componentName(services[idx])),
+						slog.Any("error", rerr))
+				}
 			}
 			releaseLock()
+			cancelRun()
 			cleanup()
-			return fmt.Errorf("%w: start %s: %v", ErrBootstrap, componentName(svc), err)
+			return fmt.Errorf("%w: start %s: %w", ErrBootstrap, componentName(svc), err)
 		}
 		if ok {
 			started = append(started, i)
@@ -224,21 +252,140 @@ func (a *App) Run(ctx context.Context) error {
 		slog.Int("services", len(services)),
 	)
 
-	// Wait for shutdown signal or context cancellation.
-	<-ctx.Done()
+	// Watch for service health failures while running.
+	hasHealth := false
+	for _, svc := range services {
+		if _, ok := svc.(HealthChecker); ok {
+			hasHealth = true
+			break
+		}
+	}
+
+	monitorDone := make(chan struct{})
+	if hasHealth {
+		go func() {
+			defer close(monitorDone)
+			if a.checkHealth(runCtx, services, cancelRun, logger) {
+				return
+			}
+			ticker := time.NewTicker(10 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+				}
+				if a.checkHealth(runCtx, services, cancelRun, logger) {
+					return
+				}
+			}
+		}()
+	} else {
+		close(monitorDone)
+	}
+
+	// Wait for shutdown signal, cancellation, or service failure.
+	<-runCtx.Done()
+
+	cancelRun()
+	select {
+	case <-monitorDone:
+	case <-time.After(a.shutdownTimeout):
+	}
 
 	logger.Info("shutting down i3_next")
 
-	// Stop services in reverse order.
-	stopCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
-	defer cancel()
+	// Stop services in reverse registration order.
+	var stopErrors []error
 	for i := len(services) - 1; i >= 0; i-- {
-		_, _ = callLifecycle(stopCtx, services[i], "Stop")
+		if err := a.stopService(services[i], a.shutdownTimeout); err != nil {
+			stopErrors = append(stopErrors, err)
+		}
 	}
 
 	releaseLock()
+	cancelRun()
 	cleanup()
+
+	a.mu.Lock()
+	hf := a.healthFailure
+	a.mu.Unlock()
+	if hf != nil {
+		if len(stopErrors) > 0 {
+			return fmt.Errorf("%w: %w", hf, errors.Join(stopErrors...))
+		}
+		return hf
+	}
+	if len(stopErrors) > 0 {
+		return fmt.Errorf("shutdown: %w", errors.Join(stopErrors...))
+	}
 	return nil
+}
+
+func (a *App) checkHealth(ctx context.Context, services []any, cancel context.CancelFunc, logger *slog.Logger) bool {
+	for _, svc := range services {
+		hc, ok := svc.(HealthChecker)
+		if !ok {
+			continue
+		}
+		info := hc.Health(ctx)
+		name := info.Name
+		if name == "" {
+			name = componentName(svc)
+		}
+		if info.Health == contracts.HealthFail || info.State == contracts.ServiceFailed {
+			logger.Error("service failed",
+				slog.String("service", name),
+				slog.String("health", string(info.Health)),
+				slog.String("state", string(info.State)))
+			a.setDegraded(true)
+			a.mu.Lock()
+			a.healthFailure = fmt.Errorf("service failed: %s", name)
+			a.mu.Unlock()
+			cancel()
+			return true
+		}
+		if info.Health == contracts.HealthWarn || info.State == contracts.ServiceDegraded {
+			a.setDegraded(true)
+			logger.Warn("service degraded",
+				slog.String("service", name),
+				slog.String("health", string(info.Health)),
+				slog.String("state", string(info.State)))
+		}
+	}
+	return false
+}
+
+func (a *App) stopService(svc any, timeout time.Duration) error {
+	stopper, ok := svc.(Stopper)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	type result struct {
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		ch <- result{err: stopper.Stop(ctx)}
+	}()
+
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			a.logger.Error("service stop failed",
+				slog.String("service", componentName(svc)),
+				slog.Any("error", r.err))
+		}
+		return r.err
+	case <-ctx.Done():
+		a.logger.Error("service stop timed out",
+			slog.String("service", componentName(svc)))
+		return fmt.Errorf("%w: %w: stop %s: timeout", ErrBootstrap, coreerrors.ErrTimeout, componentName(svc))
+	}
 }
 
 func (a *App) bootstrapDirs() error {
@@ -280,8 +427,6 @@ func (a *App) acquireLock() (*os.File, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Re-check the inode after open: if the path was replaced or
-		// unlinked in the meantime, do not lock the stale inode.
 		fi, err := f.Stat()
 		if err != nil {
 			_ = f.Close()
@@ -303,7 +448,6 @@ func (a *App) acquireLock() (*os.File, error) {
 			}
 			return nil, err
 		}
-		// Re-check again after locking to avoid locking a deleted inode.
 		fi2, err := f.Stat()
 		if err != nil {
 			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)

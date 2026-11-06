@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"errors"
+
 	coreerrors "i3_next/internal/core/errors"
 )
 

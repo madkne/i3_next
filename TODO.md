@@ -49,7 +49,7 @@
   - Replace the reflection-based `callLifecycle` with typed interfaces (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`). (The current `param.Implements(ctxType)` check is backwards.)
   - Remove the aliases `AddService/Add/Use`.
   - Merge `ErrAlreadyRunning/ErrNotRunning` with `internal/core/errors`; keep `ErrLoggerRequired` in one place.
-- [ ] **FIX-10** `App.Run`: ✅
+- [x] **FIX-10** `App.Run`: ✅
   - Log and collect `Stop` errors (do not ignore them).
   - Log "starting" after startup succeeds, and take the version from `internal/version`.
   - Watch for service failure while running (Health/exit) and go degraded or shut down by policy.
