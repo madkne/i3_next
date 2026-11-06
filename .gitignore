@@ -48,3 +48,4 @@ coverage.out
 *.tmp
 
 tmp.*
+old/

@@ -65,9 +65,11 @@ sudo apt install -y \
 2. for testing on kvm
 
 ```bash
+python3 tests/vm/vm.py doctor
 make vm-up
-
 make vm-test
+make vm-test-clean
+make vm-gui
 ```
 
 ### Requirements
