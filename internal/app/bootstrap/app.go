@@ -175,7 +175,6 @@ func (a *App) Run(ctx context.Context) error {
 		if f != nil {
 			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 			_ = f.Close()
-			_ = os.Remove(f.Name())
 		}
 	}
 
@@ -265,21 +264,53 @@ func (a *App) acquireLock() (*os.File, error) {
 		return nil, err
 	}
 	lockPath := filepath.Join(a.runtimeDir, "i3-next.lock")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
-			return nil, ErrAlreadyRunning
+	for attempts := 0; attempts < 8; attempts++ {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
+		// Re-check the inode after open: if the path was replaced or
+		// unlinked in the meantime, do not lock the stale inode.
+		fi, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		pi, err := os.Stat(lockPath)
+		if err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		if !os.SameFile(fi, pi) {
+			_ = f.Close()
+			continue
+		}
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			_ = f.Close()
+			if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+				return nil, ErrAlreadyRunning
+			}
+			return nil, err
+		}
+		// Re-check again after locking to avoid locking a deleted inode.
+		fi2, err := f.Stat()
+		if err != nil {
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = f.Close()
+			return nil, err
+		}
+		pi2, err := os.Stat(lockPath)
+		if err != nil || !os.SameFile(fi2, pi2) {
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = f.Close()
+			continue
+		}
+		_ = f.Truncate(0)
+		_, _ = f.WriteString(strconv.Itoa(os.Getpid()))
+		_ = f.Sync()
+		return f, nil
 	}
-	_ = f.Truncate(0)
-	_, _ = f.WriteString(strconv.Itoa(os.Getpid()))
-	_ = f.Sync()
-	return f, nil
+	return nil, ErrAlreadyRunning
 }
 
 // callLifecycle invokes a named lifecycle method if present.

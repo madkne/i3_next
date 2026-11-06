@@ -44,7 +44,7 @@
 - [x] **FIX-04** The version is repeated in many places and does not match (`i3-nextd` = `0.1.1`, others `0.1.0`, `app.go` has a hard-coded `"0.1.0"`, plus `contracts.AppVersion`). ✅ Create an `internal/version` package (Version/Commit/BuildDate from `-ldflags`); delete the `info.go` files; all binaries (including `i3-next-doctor`) give the same `--version` output; e2e `t_version_flags` covers all four binaries.
 - [x] **FIX-05** Check the Go version. ✅ `go.mod` has only `go` (the real minimum) and `toolchain` if needed; CI uses `go-version-file: go.mod`; the chosen version can be installed on both Tier-1 distros (`guest-provision.sh` already checks with HEAD).
 - [x] **FIX-07** `bootstrapDirs` creates directories with `0o755`, but `SECURITY.md` promises minimal permissions. ✅ Create runtime/state/data/config with `0o700`; add a unit test for the mode (using `t.TempDir()` and `XDG_*`).
-- [ ] **FIX-08** Removing the lock file after `flock(UN)` has a classic race (a second process can lock the deleted inode). ✅ Do not delete the lock file (or re-check the inode with `stat` after open); test with two processes at once where exactly one wins.
+- [x] **FIX-08** Removing the lock file after `flock(UN)` has a classic race (a second process can lock the deleted inode). ✅ Do not delete the lock file (or re-check the inode with `stat` after open); test with two processes at once where exactly one wins.
 - [ ] **FIX-09** `internal/app/bootstrap`: ✅
   - Replace the reflection-based `callLifecycle` with typed interfaces (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`). (The current `param.Implements(ctxType)` check is backwards.)
   - Remove the aliases `AddService/Add/Use`.

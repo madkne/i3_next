@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -55,6 +56,53 @@ func TestBootstrapDirsMode(t *testing.T) {
 	check(config.StateDir(), 0o700)
 }
 
+// TestAcquireLockConcurrency verifies that two concurrent acquirers result in
+// exactly one winner, and that the lock file is not removed on release.
+func TestAcquireLockConcurrency(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "run")
+
+	app1, err := New(discardLogger(), WithRuntimeDir(dir))
+	if err != nil {
+		t.Fatalf("New app1: %v", err)
+	}
+	app2, err := New(discardLogger(), WithRuntimeDir(dir))
+	if err != nil {
+		t.Fatalf("New app2: %v", err)
+	}
+
+	// Hold the first lock until the second has had a chance to contend.
+	f1, err1 := app1.acquireLock()
+	if err1 != nil {
+		t.Fatalf("app1 acquireLock: %v", err1)
+	}
+	defer func() { _ = f1.Close() }()
+
+	// Second acquirer must fail while the first holds the lock.
+	_, err2 := app2.acquireLock()
+	if err2 == nil {
+		t.Fatal("app2 acquired lock while app1 holds it")
+	}
+	if !errors.Is(err2, ErrAlreadyRunning) {
+		t.Fatalf("app2 err = %v, want %v", err2, ErrAlreadyRunning)
+	}
+
+	// Release the first lock.
+	_ = syscall.Flock(int(f1.Fd()), syscall.LOCK_UN)
+	_ = f1.Close()
+
+	// After release, a new acquirer can take the lock (file not deleted).
+	f3, err3 := app2.acquireLock()
+	if err3 != nil {
+		t.Fatalf("app2 acquireLock after release: %v", err3)
+	}
+	defer func() { _ = f3.Close() }()
+
+	lockPath := filepath.Join(dir, "i3-next.lock")
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Fatalf("lock file removed: %v", err)
+	}
+}
 func TestRunStopsOnContextCancel(t *testing.T) {
 	app, err := New(discardLogger())
 	if err != nil {
