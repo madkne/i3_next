@@ -7,21 +7,41 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
+	"i3_next/internal/api/contracts"
 	"i3_next/internal/core/config"
+	coreerrors "i3_next/internal/core/errors"
 	"i3_next/internal/version"
 )
 
+// Typed lifecycle interfaces replacing the previous reflection-based dispatch.
+type Starter interface {
+	Start(ctx context.Context) error
+}
+
+type Stopper interface {
+	Stop(ctx context.Context) error
+}
+
+type HealthChecker interface {
+	Health(ctx context.Context) contracts.ServiceInfo
+}
+
+type Reloader interface {
+	Reload(ctx context.Context) error
+}
+
+type Named interface {
+	Name() string
+}
+
 // Errors returned by the bootstrap package.
 var (
-	ErrAlreadyRunning = errors.New("already running")
-	ErrNotRunning     = errors.New("not running")
-	ErrBootstrap      = errors.New("bootstrap failed")
+	ErrBootstrap = errors.New("bootstrap failed")
 )
 
 // Option configures an App.
@@ -102,20 +122,11 @@ func (a *App) Register(service any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.running {
-		return ErrAlreadyRunning
+		return coreerrors.ErrAlreadyRunning
 	}
 	a.services = append(a.services, service)
 	return nil
 }
-
-// AddService is an alias for Register.
-func (a *App) AddService(service any) error { return a.Register(service) }
-
-// Add is an alias for Register.
-func (a *App) Add(service any) error { return a.Register(service) }
-
-// Use is an alias for Register.
-func (a *App) Use(service any) error { return a.Register(service) }
 
 // AddStartupHook registers a startup hook.
 func (a *App) AddStartupHook(fn func(context.Context) error) {
@@ -136,7 +147,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return ErrAlreadyRunning
+		return coreerrors.ErrAlreadyRunning
 	}
 	a.running = true
 	services := append([]any(nil), a.services...)
@@ -288,7 +299,7 @@ func (a *App) acquireLock() (*os.File, error) {
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 			_ = f.Close()
 			if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
-				return nil, ErrAlreadyRunning
+				return nil, coreerrors.ErrAlreadyRunning
 			}
 			return nil, err
 		}
@@ -310,52 +321,41 @@ func (a *App) acquireLock() (*os.File, error) {
 		_ = f.Sync()
 		return f, nil
 	}
-	return nil, ErrAlreadyRunning
+	return nil, coreerrors.ErrAlreadyRunning
 }
 
-// callLifecycle invokes a named lifecycle method if present.
+// callLifecycle invokes a named lifecycle method if the value implements the
+// corresponding typed interface.
 func callLifecycle(ctx context.Context, v any, name string) (bool, error) {
-	val := reflect.ValueOf(v)
-	if !val.IsValid() {
+	if v == nil {
 		return false, nil
 	}
-	method := val.MethodByName(name)
-	if !method.IsValid() {
-		return false, nil
-	}
-	mt := method.Type()
-
-	var args []reflect.Value
-	if mt.NumIn() == 1 {
-		param := mt.In(0)
-		ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-		if !param.Implements(ctxType) {
-			return false, fmt.Errorf("unexpected parameter type %s", param)
+	switch name {
+	case "Start":
+		if s, ok := v.(Starter); ok {
+			return true, s.Start(ctx)
 		}
-		args = append(args, reflect.ValueOf(ctx))
-	} else if mt.NumIn() != 0 {
-		return false, fmt.Errorf("unexpected parameter count %d", mt.NumIn())
+	case "Stop":
+		if s, ok := v.(Stopper); ok {
+			return true, s.Stop(ctx)
+		}
+	case "Health":
+		if h, ok := v.(HealthChecker); ok {
+			_ = h.Health(ctx)
+			return true, nil
+		}
+	case "Reload":
+		if r, ok := v.(Reloader); ok {
+			return true, r.Reload(ctx)
+		}
 	}
-
-	results := method.Call(args)
-	if mt.NumOut() == 0 {
-		return true, nil
-	}
-	last := results[mt.NumOut()-1]
-	if err, ok := last.Interface().(error); ok {
-		return true, err
-	}
-	return true, nil
+	return false, nil
 }
 
 func componentName(v any) string {
-	val := reflect.ValueOf(v)
-	if val.IsValid() {
-		if m := val.MethodByName("Name"); m.IsValid() && m.Type().NumIn() == 0 && m.Type().NumOut() >= 1 {
-			res := m.Call(nil)
-			if s, ok := res[0].Interface().(string); ok && s != "" {
-				return s
-			}
+	if n, ok := v.(Named); ok {
+		if s := n.Name(); s != "" {
+			return s
 		}
 	}
 	return fmt.Sprintf("%T", v)

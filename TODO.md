@@ -45,7 +45,7 @@
 - [x] **FIX-05** Check the Go version. ✅ `go.mod` has only `go` (the real minimum) and `toolchain` if needed; CI uses `go-version-file: go.mod`; the chosen version can be installed on both Tier-1 distros (`guest-provision.sh` already checks with HEAD).
 - [x] **FIX-07** `bootstrapDirs` creates directories with `0o755`, but `SECURITY.md` promises minimal permissions. ✅ Create runtime/state/data/config with `0o700`; add a unit test for the mode (using `t.TempDir()` and `XDG_*`).
 - [x] **FIX-08** Removing the lock file after `flock(UN)` has a classic race (a second process can lock the deleted inode). ✅ Do not delete the lock file (or re-check the inode with `stat` after open); test with two processes at once where exactly one wins.
-- [ ] **FIX-09** `internal/app/bootstrap`: ✅
+- [x] **FIX-09** `internal/app/bootstrap`: ✅
   - Replace the reflection-based `callLifecycle` with typed interfaces (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`). (The current `param.Implements(ctxType)` check is backwards.)
   - Remove the aliases `AddService/Add/Use`.
   - Merge `ErrAlreadyRunning/ErrNotRunning` with `internal/core/errors`; keep `ErrLoggerRequired` in one place.

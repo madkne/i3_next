@@ -1,7 +1,7 @@
 package version
 
 // Version is the application version.
-const Version = "0.1.4"
+const Version = "0.1.5"
 
 var (
 	// Commit is the VCS commit hash the binary was built from.
