@@ -54,7 +54,7 @@
   - Log "starting" after startup succeeds, and take the version from `internal/version`.
   - Watch for service failure while running (Health/exit) and go degraded or shut down by policy.
   - Tests: rollback on start failure, reverse stop order, shutdown timeout, hook failure, running again after Run.
-- [ ] **FIX-12** (P0) CI: ✅
+- [x] **FIX-12** (P0) CI: ✅
   - Pin actions by SHA; pin `staticcheck` and `golangci-lint` to exact versions (not `latest`).
   - Add `govulncheck ./...`.
   - Add `concurrency: cancel-in-progress` and `timeout-minutes` to jobs.
