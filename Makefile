@@ -20,7 +20,7 @@ LDFLAGS := -s -w \
 
 -include tests/vm/vm.mk
 
-.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint naming check-naming clean run check
+.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint naming check-naming clean run check install
 
 all: check build
 
@@ -40,12 +40,10 @@ staticcheck:
 	staticcheck ./...
 
 shellcheck:
-	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not installed; skipping"; exit 0; }
-	@find . -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
+	@if command -v shellcheck >/dev/null 2>&1; then find . -type f -name '*.sh' -print0 | xargs -0 -r shellcheck; else echo "shellcheck not installed; skipping"; fi
 
 qmllint:
-	@command -v qmllint >/dev/null 2>&1 || { echo "qmllint not installed; skipping"; exit 0; }
-	@find ui -type f -name '*.qml' -print0 | xargs -0 -r qmllint
+	@if command -v qmllint >/dev/null 2>&1; then find ui -type f -name '*.qml' -print0 | xargs -0 -r qmllint; else echo "qmllint not installed; skipping"; fi
 
 test:
 	$(GO) test -race ./...
