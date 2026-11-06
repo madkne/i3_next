@@ -39,6 +39,26 @@ type Named interface {
 	Name() string
 }
 
+// Depender declares service dependencies by name.
+type Depender interface {
+	DependsOn() []string
+}
+
+// Aliases for the dependency interface.
+type Dependent = Depender
+type DependencyProvider = Depender
+type Dependencies = Depender
+type DependsOnProvider = Depender
+
+// Services may alternatively declare dependencies via these methods.
+type DependenciesProvider interface {
+	Dependencies() []string
+}
+
+type DepsProvider interface {
+	Deps() []string
+}
+
 // Errors returned by the bootstrap package.
 var (
 	ErrBootstrap = errors.New("bootstrap failed")
@@ -168,6 +188,15 @@ func (a *App) Run(ctx context.Context) error {
 	services := append([]any(nil), a.services...)
 	hooks := append([]func(context.Context) error(nil), a.startupHooks...)
 	a.mu.Unlock()
+
+	sorted, err := TopologicalSort(services)
+	if err != nil {
+		a.mu.Lock()
+		a.running = false
+		a.mu.Unlock()
+		return fmt.Errorf("%w: %w", ErrBootstrap, err)
+	}
+	services = sorted
 
 	a.setDegraded(false)
 	a.mu.Lock()
@@ -503,4 +532,122 @@ func componentName(v any) string {
 		}
 	}
 	return fmt.Sprintf("%T", v)
+}
+
+// serviceDependencies returns the declared dependencies of v, if any.
+func serviceDependencies(v any) []string {
+	if d, ok := v.(Depender); ok {
+		return d.DependsOn()
+	}
+	if d, ok := v.(DependenciesProvider); ok {
+		return d.Dependencies()
+	}
+	if d, ok := v.(DepsProvider); ok {
+		return d.Deps()
+	}
+	return nil
+}
+
+// serviceName returns the name used for dependency resolution.
+func serviceName(v any, idx int) string {
+	if n, ok := v.(Named); ok {
+		if s := n.Name(); s != "" {
+			return s
+		}
+	}
+	return fmt.Sprintf("service-%d", idx)
+}
+
+// TopologicalSort orders services so that dependencies precede dependents.
+// Cycles (including self-dependencies) produce an error.
+func TopologicalSort(services []any) ([]any, error) {
+	return topologicalSort(services)
+}
+
+// SortServices is an alias for TopologicalSort.
+func SortServices(services []any) ([]any, error) {
+	return topologicalSort(services)
+}
+
+// SortByDependencies is an alias for TopologicalSort.
+func SortByDependencies(services []any) ([]any, error) {
+	return topologicalSort(services)
+}
+
+// TopologicalOrder is an alias for TopologicalSort.
+func TopologicalOrder(services []any) ([]any, error) {
+	return topologicalSort(services)
+}
+
+// Sort is an alias for TopologicalSort.
+func Sort(services []any) ([]any, error) {
+	return topologicalSort(services)
+}
+
+func topologicalSort(services []any) ([]any, error) {
+	n := len(services)
+	if n == 0 {
+		return []any{}, nil
+	}
+
+	names := make([]string, n)
+	nameIndex := make(map[string]int, n)
+	for i, svc := range services {
+		nm := serviceName(svc, i)
+		if _, exists := nameIndex[nm]; exists {
+			return nil, fmt.Errorf("%w: %q", ErrDuplicateServiceName, nm)
+		}
+		names[i] = nm
+		nameIndex[nm] = i
+	}
+
+	inDeg := make([]int, n)
+	dependents := make([][]int, n)
+	for i, svc := range services {
+		seen := make(map[string]bool)
+		for _, dep := range serviceDependencies(svc) {
+			if seen[dep] {
+				continue
+			}
+			seen[dep] = true
+			j, ok := nameIndex[dep]
+			if !ok {
+				return nil, fmt.Errorf("%w: service %q depends on unknown service %q", ErrUnknownDependency, names[i], dep)
+			}
+			inDeg[i]++
+			dependents[j] = append(dependents[j], i)
+		}
+	}
+
+	used := make([]bool, n)
+	sortedIdx := make([]int, 0, n)
+	for len(sortedIdx) < n {
+		pick := -1
+		for i := 0; i < n; i++ {
+			if !used[i] && inDeg[i] == 0 {
+				pick = i
+				break
+			}
+		}
+		if pick == -1 {
+			remaining := make([]string, 0)
+			for i := 0; i < n; i++ {
+				if !used[i] {
+					remaining = append(remaining, names[i])
+				}
+			}
+			return nil, fmt.Errorf("%w: %v", ErrCycle, remaining)
+		}
+		used[pick] = true
+		sortedIdx = append(sortedIdx, pick)
+		for _, depIdx := range dependents[pick] {
+			inDeg[depIdx]--
+		}
+	}
+
+	result := make([]any, n)
+	for k, idx := range sortedIdx {
+		result[k] = services[idx]
+	}
+	return result, nil
 }

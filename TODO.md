@@ -75,7 +75,7 @@
 ## 2. Desktop Core and lifecycle
 
 ### 2.1 Bootstrap and lifecycle
-- [ ] **CORE-01** (P0) Deterministic startup order: services declare `DependsOn()` and are sorted topologically; cycles give an error. ✅ Test order and cycle detection. ⛓ FIX-09
+- [x] **CORE-01** (P0) Deterministic startup order: services declare `DependsOn()` and are sorted topologically; cycles give an error. ✅ Test order and cycle detection. ⛓ FIX-09
 - [ ] **CORE-02** (P0) Service contract in `internal/core/registry`:
   ```go
   type Service interface {
