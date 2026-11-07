@@ -66,9 +66,9 @@
 - [x] **FIX-16** (P1) One naming rule: `i3_next` (module/AppName) vs `i3-next` (dirs/binaries). ✅ Write it in `docs/development/naming.md` and add a script that checks it.
 
 ### Rest of section 1
-- [ ] **STRUCT-01** (P0) Create packages only when they have real code (no empty folders). ✅ Enforce the import rule (core ⟵ adapters/services ⟵ api) with `depguard` / `go-arch-lint` in `.golangci.yml`.
-- [ ] **STRUCT-02** (P1) `CODEOWNERS`, PR/Issue templates, `CHANGELOG.md` (Keep a Changelog).
-- [ ] **STRUCT-03** (P1) `go.sum` and a dependency policy: every new dependency needs a reason in the PR and a license check. (⛓ SEC-10)
+- [x] **STRUCT-01** (P0) Create packages only when they have real code (no empty folders). ✅ Enforce the import rule (core ⟵ adapters/services ⟵ api) with `depguard` / `go-arch-lint` in `.golangci.yml`.
+- [x] **STRUCT-02** (P1) `CODEOWNERS`, PR/Issue templates, `CHANGELOG.md` (Keep a Changelog).
+- [x] **STRUCT-03** (P1) `go.sum` and a dependency policy: every new dependency needs a reason in the PR and a license check. (⛓ SEC-10)
 
 ---
 
