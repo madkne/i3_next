@@ -112,9 +112,9 @@
 
 > Today only `paths.go` exists, so everything below is open.
 
-- [ ] **CFG-01** (P0) Typed Go structs for the four files plus `version`, and a strict parser (`yaml.v3` with `KnownFields(true)`); record the new dependencies. ✅ Valid/invalid fixtures.
-- [ ] **CFG-02** (P0) A written schema (JSON Schema or a Go validator) and error messages with key path and line number (`desktop.yaml:12 ui.theme: unknown value "x"`).
-- [ ] **CFG-03** (P0) `//go:embed` for `configs/defaults/*` and fill in valid values (`shortcuts.yaml` / `plugins.yaml` must not be just empty lists: add real default shortcuts at least).
+- [x] **CFG-01** (P0) Typed Go structs for the four files plus `version`, and a strict parser (`yaml.v3` with `KnownFields(true)`); record the new dependencies. ✅ Valid/invalid fixtures.
+- [x] **CFG-02** (P0) A written schema (JSON Schema or a Go validator) and error messages with key path and line number (`desktop.yaml:12 ui.theme: unknown value "x"`).
+- [x] **CFG-03** (P0) `//go:embed` for `configs/defaults/*` and fill in valid values (`shortcuts.yaml` / `plugins.yaml` must not be just empty lists: add real default shortcuts at least).
 - [ ] **CFG-04** (P0) Documented and built layer order: defaults < `/etc/i3-next` < `~/.config/i3-next` < env (`I3NEXT_*`) < flags. ✅ Merge test.
 - [ ] **CFG-05** (P0) Install defaults on first run with `O_EXCL` (never overwrite). ✅ Idempotency test.
 - [ ] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test.
