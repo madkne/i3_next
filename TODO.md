@@ -142,7 +142,7 @@
 
 ### 4.2 Window and workspace management
 - [x] **SWAY-20** (P0) `workspace` / `window-manager` service: snapshot + events ⟵ event bus. (⛓ CORE-20/22)
-- [ ] **SWAY-21** (P0) Operations: focus/move/close/floating/layout/move-to-workspace/output. Inputs (workspace name, app_id) must be **escaped/validated** so command injection into Sway is impossible. ✅ Test with an input like `; exec ...`.
+- [x] **SWAY-21** (P0) Operations: focus/move/close/floating/layout/move-to-workspace/output. Inputs (workspace name, app_id) must be **escaped/validated** so command injection into Sway is impossible. ✅ Test with an input like `; exec ...`.
 - [ ] **SWAY-22** (P1) Multi-monitor: workspace↔output, hotplug (connect the existing `sway_monitor_hotplug` test to the service).
 - [ ] **SWAY-23** (P1) Window rules with a schema; generate `window-rules` from config instead of a fixed file.
 - [ ] **SWAY-24** (P0) Generate the Sway config from a template (`text/template`) into `state_dir/generated/`, validate with `sway --validate -c`, and **never** overwrite the user's config without a backup/consent. ✅

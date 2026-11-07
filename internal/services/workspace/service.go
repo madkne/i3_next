@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"i3_next/internal/adapters/sway"
 	"i3_next/internal/api/contracts"
@@ -150,4 +152,80 @@ func (s *Service) loop(ctx context.Context, ch <-chan sway.Message) {
 			_ = s.rebuild(ctx)
 		}
 	}
+}
+
+func (s *Service) runCommand(ctx context.Context, command string) error {
+	if s.adapter == nil {
+		return errors.New("workspace: sway adapter not available")
+	}
+	_, err := s.adapter.RunCommand(ctx, command)
+	return err
+}
+
+// FocusWorkspace focuses the workspace with the given name.
+func (s *Service) FocusWorkspace(ctx context.Context, name string) error {
+	if err := sway.ValidateWorkspaceName(name); err != nil {
+		return err
+	}
+	return s.runCommand(ctx, fmt.Sprintf("workspace %s", name))
+}
+
+// MoveWindowToWorkspace moves the window matching app_id to the workspace.
+func (s *Service) MoveWindowToWorkspace(ctx context.Context, appID, workspace string) error {
+	if err := sway.ValidateAppID(appID); err != nil {
+		return err
+	}
+	if err := sway.ValidateWorkspaceName(workspace); err != nil {
+		return err
+	}
+	return s.runCommand(ctx, fmt.Sprintf("[app_id=\"%s\"] move window to workspace %s", appID, workspace))
+}
+
+// CloseWindow closes the window matching app_id, or the focused window when appID is empty.
+func (s *Service) CloseWindow(ctx context.Context, appID string) error {
+	if appID != "" {
+		if err := sway.ValidateAppID(appID); err != nil {
+			return err
+		}
+		return s.runCommand(ctx, fmt.Sprintf("[app_id=\"%s\"] kill", appID))
+	}
+	return s.runCommand(ctx, "kill")
+}
+
+// FloatingEnable enables floating mode for the window matching app_id.
+func (s *Service) FloatingEnable(ctx context.Context, appID string) error {
+	if err := sway.ValidateAppID(appID); err != nil {
+		return err
+	}
+	return s.runCommand(ctx, fmt.Sprintf("[app_id=\"%s\"] floating enable", appID))
+}
+
+// FloatingDisable disables floating mode for the window matching app_id.
+func (s *Service) FloatingDisable(ctx context.Context, appID string) error {
+	if err := sway.ValidateAppID(appID); err != nil {
+		return err
+	}
+	return s.runCommand(ctx, fmt.Sprintf("[app_id=\"%s\"] floating disable", appID))
+}
+
+// Layout sets the layout of the focused container. layout must be one of
+// splitv, splith, stacking, tabbed, or "toggle split".
+func (s *Service) Layout(ctx context.Context, layout string) error {
+	switch layout {
+	case "splitv", "splith", "stacking", "tabbed", "toggle split":
+	default:
+		return fmt.Errorf("%w: unsupported layout %q", sway.ErrInvalidSwayInput, layout)
+	}
+	return s.runCommand(ctx, fmt.Sprintf("layout %s", layout))
+}
+
+// MoveToOutput moves the window matching app_id to the output.
+func (s *Service) MoveToOutput(ctx context.Context, appID, output string) error {
+	if err := sway.ValidateAppID(appID); err != nil {
+		return err
+	}
+	if err := sway.ValidateOutputName(output); err != nil {
+		return err
+	}
+	return s.runCommand(ctx, fmt.Sprintf("[app_id=\"%s\"] move window to output %s", appID, output))
 }
