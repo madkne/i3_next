@@ -46,7 +46,7 @@ func TestReconnectingAdapterSubscribe(t *testing.T) {
 	if err := a.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	defer a.Stop(context.Background())
+	defer func() { _ = a.Stop(context.Background()) }()
 	ch, err := a.Subscribe(ctx, []string{"workspace"})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)

@@ -216,10 +216,11 @@ func outputsFromTree(c *Client, ctx context.Context) ([]Output, error) {
 		return nil, err
 	}
 	var outs []Output
-	for _, n := range nodes {
-		if n.Type != "output" {
+	for i := range nodes {
+		if nodes[i].Type != "output" {
 			continue
 		}
+		n := &nodes[i]
 		outs = append(outs, Output{
 			ID:               n.ID,
 			Name:             n.Name,

@@ -37,16 +37,20 @@ type Service struct {
 
 // New builds a supervised process service. spec must include Command/Args and
 // optionally a RestartPolicy; depend lists service names that must start first.
-func New(name string, depend []string, sup *supervisor.Supervisor, spec supervisor.ProcessSpec, bus *eventbus.Bus, logger *slog.Logger) *Service {
+func New(name string, depend []string, sup *supervisor.Supervisor, spec *supervisor.ProcessSpec, bus *eventbus.Bus, logger *slog.Logger) *Service {
+	if spec == nil {
+		spec = &supervisor.ProcessSpec{}
+	}
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	spec.Supervisor = sup
+	s := spec
+	s.Supervisor = sup
 	return &Service{
 		name:   name,
 		depend: append([]string(nil), depend...),
 		sup:    sup,
-		spec:   spec,
+		spec:   *s,
 		bus:    bus,
 		logger: logger,
 		last:   contracts.ServiceStopped,

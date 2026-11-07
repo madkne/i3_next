@@ -66,6 +66,7 @@ func main() {
 	defer cancelState()
 
 	// Log every other daemon event so workspace/output changes appear in the log.
+	var eventCancels []func()
 	for _, topic := range []string{
 		events.TopicSwayConnected,
 		events.TopicSwayDisconnected,
@@ -79,8 +80,13 @@ func main() {
 				slog.String("type", string(ev.Type)),
 				slog.String("source", ev.Source))
 		})
-		defer cancel()
+		eventCancels = append(eventCancels, cancel)
 	}
+	defer func() {
+		for _, c := range eventCancels {
+			c()
+		}
+	}()
 
 	reg := registry.New()
 
@@ -105,7 +111,7 @@ func main() {
 		Multiplier:     2,
 	}
 
-	// Register each enabled service in the daemon registry, honouring the
+	// Register each enabled service in the daemon registry, honoring the
 	// enabled/required/depends_on flags from services.yaml, then hand the
 	// (unwrapped) service to bootstrap so its DependsOn() drives startup
 	// ordering and its Optional() marker governs required-vs-optional handling.
@@ -115,7 +121,7 @@ func main() {
 				slog.String("service", name))
 			return
 		}
-		var class registry.Requirement = registry.Required
+		class := registry.Required
 		if !entry.Required {
 			class = registry.Optional
 		}
@@ -135,10 +141,10 @@ func main() {
 		case "workspace":
 			add(name, entry, workspace.New(adapter, bus))
 		case "shell":
-			spec := supervisor.ProcessSpec{Command: "quickshell", Restart: restartPolicy}
+			spec := &supervisor.ProcessSpec{Command: "quickshell", Restart: restartPolicy}
 			add(name, entry, processsvc.New("shell", []string{"workspace"}, sup, spec, bus, logger))
 		case "wallpaper":
-			spec := supervisor.ProcessSpec{Command: "swaybg", Restart: restartPolicy}
+			spec := &supervisor.ProcessSpec{Command: "swaybg", Restart: restartPolicy}
 			add(name, entry, processsvc.New("wallpaper", []string{"workspace"}, sup, spec, bus, logger))
 		default:
 			logger.Warn("unknown service in services.yaml; skipping", slog.String("service", name))
@@ -153,15 +159,27 @@ func main() {
 	if err != nil {
 		logger.Error("failed to initialize application", slog.Any("error", err))
 		stop()
+		cancelState()
+		for _, c := range eventCancels {
+			c()
+		}
 		os.Exit(1)
 	}
 
 	if err := app.Run(ctx); err != nil {
 		logger.Error("application stopped with error", slog.Any("error", err))
 		stop()
+		cancelState()
+		for _, c := range eventCancels {
+			c()
+		}
 		os.Exit(1)
 	}
 
 	stop()
+	cancelState()
+	for _, c := range eventCancels {
+		c()
+	}
 	logger.Info("i3_next stopped successfully")
 }

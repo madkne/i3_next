@@ -14,7 +14,7 @@ import (
 
 func TestProcessServiceStartStop(t *testing.T) {
 	sup := supervisor.New(nil)
-	svc := New("shell", nil, sup, supervisor.ProcessSpec{Command: "sleep", Args: []string{"30"}},
+	svc := New("shell", nil, sup, &supervisor.ProcessSpec{Command: "sleep", Args: []string{"30"}},
 		eventbus.New(), nil)
 	if svc.Name() != "shell" {
 		t.Fatalf("name = %q", svc.Name())
@@ -31,7 +31,7 @@ func TestProcessServiceStartStop(t *testing.T) {
 	if err := svc.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	defer svc.Stop(context.Background())
+	defer func() { _ = svc.Stop(context.Background()) }()
 
 	deadline := time.Now().Add(5 * time.Second)
 	var running bool
@@ -66,7 +66,7 @@ func TestProcessServiceStartStop(t *testing.T) {
 func TestProcessServiceCrashRestartLimit(t *testing.T) {
 	bus := eventbus.New()
 	sup := supervisor.New(nil)
-	svc := New("shell", nil, sup, supervisor.ProcessSpec{
+	svc := New("shell", nil, sup, &supervisor.ProcessSpec{
 		Command: "sh",
 		Args:    []string{"-c", "exit 1"},
 		Restart: supervisor.RestartPolicy{
@@ -93,7 +93,7 @@ func TestProcessServiceCrashRestartLimit(t *testing.T) {
 	if err := svc.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	defer svc.Stop(context.Background())
+	defer func() { _ = svc.Stop(context.Background()) }()
 
 	deadline := time.Now().Add(10 * time.Second)
 	var failed bool

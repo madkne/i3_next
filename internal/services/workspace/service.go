@@ -119,12 +119,12 @@ func (s *Service) Health(ctx context.Context) contracts.ServiceInfo {
 	return info
 }
 
-func (s *Service) publishState(state contracts.ServiceState, reason string) {
+func (s *Service) publishState(st contracts.ServiceState, reason string) {
 	if s.bus == nil {
 		return
 	}
 	health := contracts.HealthOK
-	switch state {
+	switch st {
 	case contracts.ServiceFailed:
 		health = contracts.HealthFail
 	case contracts.ServiceDegraded:
@@ -135,7 +135,7 @@ func (s *Service) publishState(state contracts.ServiceState, reason string) {
 	ev := events.NewEvent(events.TypeServiceStateChanged, s.name, events.ServiceStateChanged{
 		Version: events.Version,
 		Name:    s.name,
-		State:   string(state),
+		State:   string(st),
 		Health:  string(health),
 		Reason:  reason,
 	})
