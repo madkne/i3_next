@@ -117,7 +117,7 @@
 - [x] **CFG-03** (P0) `//go:embed` for `configs/defaults/*` and fill in valid values (`shortcuts.yaml` / `plugins.yaml` must not be just empty lists: add real default shortcuts at least).
 - [x] **CFG-04** (P0) Documented and built layer order: defaults < `/etc/i3-next` < `~/.config/i3-next` < env (`I3NEXT_*`) < flags. ✅ Merge test.
 - [x] **CFG-05** (P0) Install defaults on first run with `O_EXCL` (never overwrite). ✅ Idempotency test.
-- [ ] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test.
+- [x] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test."
 - [ ] **CFG-07** (P0) Invalid config: the daemon starts with the last valid config (or defaults), state is `degraded` with an actionable error; no restart loop. ✅ e2e.
 - [ ] **CFG-08** (P1) Versioned migration (`vN ⟶ vN+1`) with an automatic backup first, and a golden-file test.
 - [ ] **CFG-09** (P1) Safe reload (SIGHUP + `config.reload` API): compute a diff; report non-reloadable keys clearly.
