@@ -1,7 +1,7 @@
 # Include from the top-level Makefile: -include tests/vm/vm.mk
 VM := python3 tests/vm/vm.py
 
-.PHONY: vm-doctor vm-up vm-down vm-destroy vm-recreate vm-status vm-ssh vm-sync vm-build vm-test vm-test-clean vm-gui vm-snapshot vm-restore
+.PHONY: vm-doctor vm-up vm-down vm-destroy vm-recreate vm-status vm-ssh vm-sync vm-build vm-test vm-test-clean vm-gui vm-snapshot vm-restore vm-restart
 
 vm-doctor:      ; @$(VM) doctor
 vm-up:          ; @$(VM) up
@@ -17,3 +17,4 @@ vm-test-clean:  ; @VM_RESTORE=1 $(VM) test
 vm-gui:         ; @$(VM) gui on
 vm-snapshot:    ; @$(VM) snapshot
 vm-restore:     ; @$(VM) restore
+vm-restart:     ; @$(VM) sync && $(VM) build && $(VM) gui on

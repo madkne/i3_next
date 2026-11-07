@@ -607,6 +607,13 @@ func (a *App) checkHealth(ctx context.Context, services []any, cancel context.Ca
 				slog.String("health", string(info.Health)),
 				slog.String("state", string(info.State)))
 			a.setDegraded(true)
+			// A required service failure is fatal; an optional service
+			// failure degrades the daemon but keeps it running.
+			if !serviceRequired(svc) {
+				logger.Warn("optional service failed; degrading",
+					slog.String("service", name))
+				continue
+			}
 			a.mu.Lock()
 			a.healthFailure = fmt.Errorf("service failed: %s", name)
 			a.lastFailure = a.healthFailure

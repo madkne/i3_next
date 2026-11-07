@@ -161,6 +161,85 @@ t_sway_close_window() {
   retry 50 0.2 bash -c "[ \"\$(swaymsg -t get_tree -r | jq '[recurse(.nodes[]?, .floating_nodes[]?) | select(.app_id == \"foot\")] | length')\" -eq 0 ]"
 }
 
+# ---- tests: daemon services --------------------------------------------------
+t_daemon_service_disabled() {
+  local root log pid rc=0
+  root="$(mktemp -d)"
+  log="$ARTIFACT_DIR/i3-nextd-disabled.log"
+  mkdir -p "$root/config/i3-next" "$root/run"
+  chmod 700 "$root/run"
+  cat >"$root/config/i3-next/services.yaml" <<'YAML'
+version: 1
+services:
+  shell: { enabled: false, required: false }
+YAML
+
+  XDG_CONFIG_HOME="$root/config" XDG_RUNTIME_DIR="$root/run" \
+    "$BIN/i3-nextd" --debug >"$log" 2>&1 &
+  pid=$!
+  retry 100 0.1 grep -q 'starting i3_next desktop core' "$log" ||
+    { kill -9 "$pid" 2>/dev/null || true; echo "daemon did not start"; tail -n 40 "$log"; return 1; }
+  sleep 0.5
+  if pgrep -x quickshell >/dev/null 2>&1; then
+    echo "quickshell started despite shell.enabled=false"
+    kill -TERM "$pid" 2>/dev/null || true
+    return 1
+  fi
+  kill -TERM "$pid" 2>/dev/null || true
+  ( sleep 5; kill -KILL "$pid" 2>/dev/null || true ) & wd=$!
+  wait "$pid" || rc=$?
+  kill "$wd" 2>/dev/null || true
+  [ "$rc" -eq 0 ] || { echo "exit code $rc"; return 1; }
+}
+
+t_daemon_workspace_event() {
+  local log="$ARTIFACT_DIR/i3-nextd-workspace.log" pid rc=0
+  "$BIN/i3-nextd" --debug >"$log" 2>&1 &
+  pid=$!
+  retry 100 0.1 grep -q 'starting i3_next desktop core' "$log" ||
+    { kill -9 "$pid" 2>/dev/null; echo "daemon did not start"; return 1; }
+  retry 100 0.1 grep -qi 'sway.connected' "$log" || true
+  swaymsg workspace number 2 >/dev/null
+  retry 100 0.1 grep -qi 'workspace.changed' "$log" ||
+    { echo "no workspace.changed in daemon log"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+  kill -TERM "$pid" 2>/dev/null || true
+  ( sleep 5; kill -KILL "$pid" 2>/dev/null ) & wd=$!
+  wait "$pid" || rc=$?
+  kill "$wd" 2>/dev/null || true
+  [ "$rc" -eq 0 ] || { echo "exit code $rc"; return 1; }
+  grep -q 'stopped successfully' "$log"
+}
+
+t_daemon_shell_restart() {
+  local log="$ARTIFACT_DIR/i3-nextd-shell.log" pid rc=0 pid1 pid2 i
+  command -v quickshell >/dev/null 2>&1 || { echo "quickshell not installed, skipping"; return 0; }
+  "$BIN/i3-nextd" --debug >"$log" 2>&1 &
+  pid=$!
+  retry 100 0.1 grep -q 'starting i3_next desktop core' "$log" ||
+    { kill -9 "$pid" 2>/dev/null; echo "daemon did not start"; return 1; }
+  retry 100 0.2 pgrep -x quickshell >/dev/null ||
+    { echo "shell did not start"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+  pid1="$(pgrep -n -x quickshell)"
+  # kill -9 the shell: it should restart with backoff
+  kill -9 "$pid1" 2>/dev/null || true
+  retry 40 0.25 bash -c "pid2=\$(pgrep -n -x quickshell); [ -n \"\$pid2\" ] && [ \"\$pid2\" != \"$pid1\" ]" ||
+    { echo "shell did not restart after kill -9"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+  # exceed the restart limit to reach degraded
+  for i in 1 2 3 4; do
+    pid1="$(pgrep -n -x quickshell)" || true
+    [ -n "$pid1" ] && kill -9 "$pid1" 2>/dev/null || true
+    sleep 0.6
+  done
+  retry 60 0.5 grep -q 'state=failed' "$log" ||
+    { echo "shell did not reach degraded/failed after restart limit"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+  kill -TERM "$pid" 2>/dev/null || true
+  ( sleep 5; kill -KILL "$pid" 2>/dev/null || true ) & wd=$!
+  wait "$pid" || rc=$?
+  kill "$wd" 2>/dev/null || true
+  [ "$rc" -eq 0 ] || { echo "exit code $rc"; return 1; }
+  grep -q 'stopped successfully' "$log"
+}
+
 # ---- main -------------------------------------------------------------------
 echo "i3-next e2e  (outputs=$OUTPUTS, sway config=$SWAY_CONFIG)"
 echo "artifacts: $ARTIFACT_DIR"
@@ -190,6 +269,7 @@ run_test cfg07_invalid_uses_last_valid     t_cfg07_invalid_uses_last_valid_cache
 
 echo "daemon"
 run_test daemon_lifecycle      t_daemon_lifecycle
+run_test service_disabled      t_daemon_service_disabled
 
 echo "sway (headless, $OUTPUTS virtual outputs)"
 if sway_start; then
@@ -202,6 +282,12 @@ if sway_start; then
   swaymsg -t get_tree -r    >"$ARTIFACT_DIR/tree.json"    2>/dev/null
   swaymsg -t get_outputs -r >"$ARTIFACT_DIR/outputs.json" 2>/dev/null
   run_test sway_close_window     t_sway_close_window
+  run_test daemon_workspace_event t_daemon_workspace_event
+  if command -v quickshell >/dev/null 2>&1; then
+    run_test daemon_shell_restart t_daemon_shell_restart
+  else
+    skip_test daemon_shell_restart "quickshell not installed"
+  fi
 else
   echo "  sway failed to start, see sway.log:"; tail -n 10 "$ARTIFACT_DIR/sway.log" | sed 's/^/        | /'
   FAIL=$((FAIL + 1))

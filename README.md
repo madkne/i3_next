@@ -78,9 +78,7 @@ make vm-gui # Restart the graphical VM session
 when update code and need to restart vm:
 
 ```bash
-make vm-sync  # Update the VM with your latest code
-make vm-build # Build inside the VM
-make vm-gui
+make vm-restart   # sync code, build inside the VM, and restart the graphical session
 ```
 
 ### Requirements

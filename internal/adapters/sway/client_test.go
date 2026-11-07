@@ -17,9 +17,11 @@ type fakeServer struct {
 }
 
 func newFakeServer(t *testing.T, handle func(conn net.Conn)) *fakeServer {
+	t.Helper()
 	dir := t.TempDir()
 	addr := filepath.Join(dir, "sway.ipc")
-	ln, err := net.Listen("unix", addr)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "unix", addr)
 	if err != nil {
 		t.Fatal(err)
 	}

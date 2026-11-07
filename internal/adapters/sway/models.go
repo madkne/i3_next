@@ -76,6 +76,13 @@ type Node struct {
 	FloatingNodes      []Node         `json:"floating_nodes"`
 	Marks              []string       `json:"marks"`
 	FullscreenMode     int            `json:"fullscreen_mode"`
+	Active             bool           `json:"active"`
+	CurrentWorkspace   string         `json:"current_workspace"`
+	Scale              float64        `json:"scale"`
+	Transform          string         `json:"transform"`
+	Make               string         `json:"make"`
+	Model              string         `json:"model"`
+	Serial             string         `json:"serial"`
 }
 
 func UnmarshalTree(payload []byte) (*Node, error) {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"i3_next/internal/adapters/sway"
 	"i3_next/internal/api/contracts"
@@ -11,6 +13,12 @@ import (
 	"i3_next/internal/core/eventbus"
 	"i3_next/internal/core/state"
 )
+
+// connectable is implemented by adapters that can report their connection
+// state (for example the reconnecting adapter).
+type connectable interface {
+	Connected() bool
+}
 
 // Snapshot is the immutable workspace/window-manager snapshot.
 type Snapshot struct {
@@ -21,6 +29,7 @@ type Snapshot struct {
 
 // Service implements the workspace/window-manager service.
 type Service struct {
+	logger  *slog.Logger
 	name    string
 	adapter sway.Adapter
 	bus     *eventbus.Bus
@@ -33,6 +42,7 @@ type Service struct {
 // New creates a new workspace service.
 func New(adapter sway.Adapter, bus *eventbus.Bus) *Service {
 	return &Service{
+		logger:  slog.New(slog.NewTextHandler(nil, nil)),
 		name:    "workspace",
 		adapter: adapter,
 		bus:     bus,
@@ -42,6 +52,13 @@ func New(adapter sway.Adapter, bus *eventbus.Bus) *Service {
 }
 
 func (s *Service) Name() string { return s.name }
+
+// DependsOn returns the services this service must start after.
+func (s *Service) DependsOn() []string { return []string{"sway"} }
+
+// Optional reports that the workspace service is optional: the daemon keeps
+// running (degraded) while sway is unavailable.
+func (s *Service) Optional() bool { return true }
 
 // Snapshot returns the current snapshot.
 func (s *Service) Snapshot() state.Snapshot { return s.state.Snapshot() }
@@ -53,14 +70,28 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.adapter == nil {
 		return nil
 	}
+	// Wait for the sway adapter to be connected before rebuilding the
+	// snapshot; the adapter reconnects asynchronously.
+	if c, ok := s.adapter.(connectable); ok {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if c.Connected() {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	if err := s.rebuild(ctx); err != nil {
+		s.publishState(contracts.ServiceFailed, err.Error())
 		return err
 	}
+	s.publishState(contracts.ServiceRunning, "")
 	subCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	ch, err := s.adapter.Subscribe(subCtx, []string{"workspace", "window", "output", "shutdown"})
 	if err != nil {
 		cancel()
+		s.publishState(contracts.ServiceFailed, err.Error())
 		return err
 	}
 	go s.loop(subCtx, ch)
@@ -75,12 +106,40 @@ func (s *Service) Stop(ctx context.Context) error {
 	case <-s.done:
 	case <-ctx.Done():
 	}
+	s.publishState(contracts.ServiceStopped, "")
 	return nil
 }
 
 func (s *Service) Health(ctx context.Context) contracts.ServiceInfo {
 	info := contracts.ServiceInfo{Name: s.name, State: "running", Health: "ok"}
+	if c, ok := s.adapter.(connectable); ok && !c.Connected() {
+		info.State = contracts.ServiceDegraded
+		info.Health = contracts.HealthWarn
+	}
 	return info
+}
+
+func (s *Service) publishState(state contracts.ServiceState, reason string) {
+	if s.bus == nil {
+		return
+	}
+	health := contracts.HealthOK
+	switch state {
+	case contracts.ServiceFailed:
+		health = contracts.HealthFail
+	case contracts.ServiceDegraded:
+		health = contracts.HealthWarn
+	case contracts.ServiceStopped:
+		health = contracts.HealthWarn
+	}
+	ev := events.NewEvent(events.TypeServiceStateChanged, s.name, events.ServiceStateChanged{
+		Version: events.Version,
+		Name:    s.name,
+		State:   string(state),
+		Health:  string(health),
+		Reason:  reason,
+	})
+	_ = eventbus.Publish(s.bus, string(events.TypeServiceStateChanged), ev, eventbus.Essential())
 }
 
 func (s *Service) rebuild(ctx context.Context) error {
@@ -143,6 +202,7 @@ func (s *Service) loop(ctx context.Context, ch <-chan sway.Message) {
 			return
 		case msg, ok := <-ch:
 			if !ok {
+				s.publishState(contracts.ServiceDegraded, "sway disconnected")
 				if s.bus != nil {
 					ev := events.NewEvent(events.TypeSwayDisconnected, s.name, events.SwayDisconnected{Reason: "channel closed"})
 					_ = eventbus.Publish(s.bus, string(events.TypeSwayDisconnected), ev)
@@ -150,7 +210,9 @@ func (s *Service) loop(ctx context.Context, ch <-chan sway.Message) {
 				return
 			}
 			_ = msg
-			_ = s.rebuild(ctx)
+			if err := s.rebuild(ctx); err != nil {
+				s.publishState(contracts.ServiceDegraded, err.Error())
+			}
 		}
 	}
 }

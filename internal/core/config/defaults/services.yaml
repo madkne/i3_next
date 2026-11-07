@@ -1,14 +1,16 @@
 version: 1
 services:
-  session: { enabled: true }
-  wallpaper: { enabled: true }
-  notification: { enabled: true }
-  audio: { enabled: true }
-  network: { enabled: true }
-  power: { enabled: true }
-  idle: { enabled: true }
-  lock: { enabled: true }
-  screenshot: { enabled: true }
-  clipboard: { enabled: true }
-  display: { enabled: true }
-  media: { enabled: true }
+  sway: { enabled: true, required: false }
+  workspace: { enabled: true, required: false, depends_on: [sway] }
+  shell: { enabled: true, required: false, depends_on: [workspace] }
+  wallpaper: { enabled: true, required: false, depends_on: [workspace] }
+  notification: { enabled: false }
+  audio: { enabled: false }
+  network: { enabled: false }
+  power: { enabled: false }
+  idle: { enabled: false }
+  lock: { enabled: false }
+  screenshot: { enabled: false }
+  clipboard: { enabled: false }
+  display: { enabled: false }
+  media: { enabled: false }

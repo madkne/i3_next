@@ -41,7 +41,9 @@ type PluginsConfig struct {
 }
 
 type ServiceEntry struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled   bool     `yaml:"enabled"`
+	Required  bool     `yaml:"required"`
+	DependsOn []string `yaml:"depends_on"`
 }
 
 type ServicesConfig struct {
