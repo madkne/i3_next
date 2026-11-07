@@ -100,11 +100,11 @@
 - [x] **CORE-14** (P1) Environment allowlist for children, and redact sensitive variables (`*TOKEN*`, `*SECRET*`, `*PASSWORD*`) in logs.
 
 ### 2.3 Event bus and state
-- [ ] **CORE-20** (P0) `internal/core/eventbus` with generics: `Subscribe[T](topic) (<-chan T, cancel)`. ✅
-- [ ] **CORE-21** (P0) Documented and tested backpressure policy: bounded queue; coalesce state events (only the latest value matters); never silently drop essential events (report an error); isolate handler panics.
-- [ ] **CORE-22** (P0) Define the main events in `internal/api/events` with a versioned schema: `SessionStarted`, `SwayConnected/Disconnected`, `WorkspaceChanged`, `OutputChanged`, `ConfigChanged`, `ServiceStateChanged`, `ShutdownRequested`.
-- [ ] **CORE-23** (P0) `internal/core/state`: immutable snapshot plus a monotonic version (for snapshot recovery in the API); `-race` test and a benchmark. ⛓ API-09
-- [ ] **CORE-24** (P1) Load test (10k events/s, 100 subscribers) and goroutine leak check with `goleak`.
+- [x] **CORE-20** (P0) `internal/core/eventbus` with generics: `Subscribe[T](topic) (<-chan T, cancel)`. ✅
+- [x] **CORE-21** (P0) Documented and tested backpressure policy: bounded queue; coalesce state events (only the latest value matters); never silently drop essential events (report an error); isolate handler panics.
+- [x] **CORE-22** (P0) Define the main events in `internal/api/events` with a versioned schema: `SessionStarted`, `SwayConnected/Disconnected`, `WorkspaceChanged`, `OutputChanged`, `ConfigChanged`, `ServiceStateChanged`, `ShutdownRequested`.
+- [x] **CORE-23** (P0) `internal/core/state`: immutable snapshot plus a monotonic version (for snapshot recovery in the API); `-race` test and a benchmark. ⛓ API-09
+- [x] **CORE-24** (P1) Load test (10k events/s, 100 subscribers) and goroutine leak check with `goleak`.
 
 ---
 
