@@ -1,0 +1,4 @@
+.git
+deployments/data
+*.svg
+*.png
