@@ -120,10 +120,10 @@
 - [x] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test."
 - [x] **CFG-07** (P0) Invalid config: the daemon starts with the last valid config (or defaults), state is `degraded` with an actionable error; no restart loop. ✅ `LoadDesktopWithFallback` + `bootstrap.WithConfig` + e2e `t_cfg07_*`.
 - [x] **CFG-08** (P1) Versioned migration (`vN ⟶ vN+1`) with an automatic backup first, and a golden-file test. ✅ `MigrateBytes`/`migrateIfNeeded` registry + backup + golden `testdata/golden/desktop.v1-v2.yaml`.
-- [ ] **CFG-09** (P1) Safe reload (SIGHUP + `config.reload` API): compute a diff; report non-reloadable keys clearly.
-- [ ] **CFG-10** (P1) `i3-nextctl config validate|show|backup|restore`. ⛓ OBS-05
-- [ ] **CFG-11** (P1) `docs/config/` full key reference (generated from the schema) plus examples.
-- [ ] **CFG-12** (P1) Optional file watcher (`fsnotify`) with debounce for reload.
+- [x] **CFG-09** (P1) Safe reload (SIGHUP + `config.reload` API): compute a diff; report non-reloadable keys clearly.
+- [x] **CFG-10** (P1) `i3-nextctl config validate|show|backup|restore`. ⛓ OBS-05
+- [x] **CFG-11** (P1) `docs/config/` full key reference (generated from the schema) plus examples.
+- [x] **CFG-12** (P1) Optional file watcher (`fsnotify`) with debounce for reload.
 
 ---
 

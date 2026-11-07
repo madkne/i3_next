@@ -56,6 +56,8 @@ sudo apt install -y \
     wireplumber \
     libwayland-dev \
     wayland-protocols \
+    dnsmasq-base \
+    cloud-image-utils \
     qemu-system-x86 libvirt-daemon-system virtinst virt-viewer genisoimage 
 
 sudo usermod -aG libvirt,kvm $USER
