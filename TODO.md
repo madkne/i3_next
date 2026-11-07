@@ -141,7 +141,7 @@
 - [ ] **SWAY-09** (P0) Integration test with headless Sway in `make vm-test` (using the existing `tests/e2e` setup).
 
 ### 4.2 Window and workspace management
-- [ ] **SWAY-20** (P0) `workspace` / `window-manager` service: snapshot + events ⟵ event bus. (⛓ CORE-20/22)
+- [x] **SWAY-20** (P0) `workspace` / `window-manager` service: snapshot + events ⟵ event bus. (⛓ CORE-20/22)
 - [ ] **SWAY-21** (P0) Operations: focus/move/close/floating/layout/move-to-workspace/output. Inputs (workspace name, app_id) must be **escaped/validated** so command injection into Sway is impossible. ✅ Test with an input like `; exec ...`.
 - [ ] **SWAY-22** (P1) Multi-monitor: workspace↔output, hotplug (connect the existing `sway_monitor_hotplug` test to the service).
 - [ ] **SWAY-23** (P1) Window rules with a schema; generate `window-rules` from config instead of a fixed file.
