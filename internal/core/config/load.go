@@ -412,7 +412,7 @@ func writeDefaultFile(path string, data []byte) error {
 		}
 		return fmt.Errorf("create %s: %w", filepath.Base(path), err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
 	}

@@ -8,6 +8,8 @@ BUILD_DIR := build
 
 GO := go
 
+export PATH := $(HOME)/go/bin:$(PATH)
+
 GOFMT := gofmt
 
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -21,7 +23,7 @@ LDFLAGS := -s -w \
 
 -include tests/vm/vm.mk
 
-.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint naming check-naming clean run check install
+.PHONY: all build test vet fmt fmt-check lint staticcheck shellcheck qmllint naming check-naming clean run check install push
 
 all: check build
 
@@ -38,7 +40,7 @@ lint:
 	golangci-lint run ./...
 
 staticcheck:
-	staticcheck ./...
+	@if command -v staticcheck >/dev/null 2>&1; then staticcheck ./...; else echo "staticcheck not installed; skipping"; fi
 
 shellcheck:
 	@if command -v shellcheck >/dev/null 2>&1; then find . -type f -name '*.sh' -print0 | xargs -0 -r shellcheck; else echo "shellcheck not installed; skipping"; fi
@@ -55,6 +57,8 @@ naming:
 check-naming: naming
 
 check: fmt-check vet lint staticcheck test naming
+push:
+	@bash scripts/git-push.sh $(PUSH_ARGS)
 
 build:
 	@mkdir -p $(BUILD_DIR)

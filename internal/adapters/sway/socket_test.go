@@ -39,7 +39,7 @@ func TestSocketPathFallbackSwaymsg(t *testing.T) {
 	sock := filepath.Join(dir, "ipc.sock")
 	bin := filepath.Join(dir, "swaymsg")
 	script := "#!/bin/sh\necho '" + sock + "'\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	p, err := socketPathFromSwaymsg(context.Background(), bin)
@@ -54,7 +54,7 @@ func TestSocketPathFallbackSwaymsg(t *testing.T) {
 func TestSocketPathSwaymsgEmpty(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "swaymsg")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	_, err := socketPathFromSwaymsg(context.Background(), bin)
@@ -76,7 +76,7 @@ func TestSocketPathSwaymsgFailure(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "swaymsg")
 	script := "#!/bin/sh\necho 'Unable to retrieve socket path' >&2\nexit 2\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	_, err := socketPathFromSwaymsg(context.Background(), bin)

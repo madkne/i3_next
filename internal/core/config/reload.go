@@ -32,9 +32,9 @@ type ConfigDiff struct {
 }
 
 // DiffDesktop computes the diff between old and new desktop configs.
-func DiffDesktop(old, new DesktopConfig) ConfigDiff {
+func DiffDesktop(old, newCfg DesktopConfig) ConfigDiff { //nolint:gocritic // value semantics
 	d := ConfigDiff{}
-	walkStruct("", reflect.ValueOf(old), reflect.ValueOf(new), &d)
+	walkStruct("", reflect.ValueOf(old), reflect.ValueOf(newCfg), &d)
 	for _, k := range d.Changed {
 		if IsNonReloadable(k) {
 			d.NonReloadable = append(d.NonReloadable, k)
@@ -87,14 +87,14 @@ func indexByte(s string, c byte) int {
 
 // ReloadResult summarizes a reload attempt.
 type ReloadResult struct {
-	Diff   ConfigDiff
+	Diff    ConfigDiff
 	Applied bool
 	Reason  string
 }
 
 // ValidateReload checks diff and reports non-reloadable keys.
-func ValidateReload(old, new DesktopConfig) ReloadResult {
-	diff := DiffDesktop(old, new)
+func ValidateReload(old, newCfg DesktopConfig) ReloadResult { //nolint:gocritic // value semantics
+	diff := DiffDesktop(old, newCfg)
 	if len(diff.NonReloadable) > 0 {
 		return ReloadResult{Diff: diff, Applied: false, Reason: fmt.Sprintf("non-reloadable keys changed: %v", diff.NonReloadable)}
 	}

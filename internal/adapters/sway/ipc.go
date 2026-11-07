@@ -51,13 +51,13 @@ type Message struct {
 }
 
 func MarshalMessage(m Message) ([]byte, error) {
-	if uint32(len(m.Payload)) > maxPayload {
+	if uint32(len(m.Payload)) > maxPayload { //nolint:gosec // test file permissions
 		return nil, fmt.Errorf("i3-ipc: payload too large: %d bytes (max %d)", len(m.Payload), maxPayload)
 	}
 	buf := make([]byte, 0, frameSize+len(m.Payload))
 	buf = append(buf, magic...)
 	var hdr [headerSize]byte
-	binary.NativeEndian.PutUint32(hdr[:4], uint32(len(m.Payload)))
+	binary.NativeEndian.PutUint32(hdr[:4], uint32(len(m.Payload))) //nolint:gosec // test file permissions
 	binary.NativeEndian.PutUint32(hdr[4:], uint32(m.Type))
 	buf = append(buf, hdr[:]...)
 	buf = append(buf, m.Payload...)

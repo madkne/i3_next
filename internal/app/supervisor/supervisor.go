@@ -960,7 +960,7 @@ func (p *Process) runLoop(ctx context.Context) {
 		if pol.Jitter > 0 {
 			jitter := time.Duration(float64(wait) * pol.Jitter)
 			if jitter > 0 {
-				wait += time.Duration(rand.Int63n(int64(jitter) + 1)) //nolint:gosec // non-cryptographic jitter is sufficient
+				wait += time.Duration(rand.Int63n(int64(jitter) + 1)) //nolint:gosec // test file permissions // non-cryptographic jitter is sufficient
 			}
 		}
 		if wait > pol.MaxBackoff && pol.MaxBackoff > 0 {

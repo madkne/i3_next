@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func TestMigrateBytesGolden(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(golden), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(golden, out, 0o644); err != nil {
+		if err := os.WriteFile(golden, out, 0o644); err != nil { //nolint:gosec // test file permissions
 			t.Fatal(err)
 		}
 	}
@@ -49,7 +50,7 @@ func TestMigrateBytesGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden (set UPDATE_GOLDEN=1 to create): %v", err)
 	}
-	if string(out) != string(want) {
+	if !bytes.Equal(out, want) {
 		t.Fatalf("migration output mismatch\n--- got ---\n%s\n--- want ---\n%s", out, want)
 	}
 	if !strings.Contains(string(out), "version: 2") {
@@ -85,7 +86,7 @@ func TestMigrateFileCreatesBackupBeforeWrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "desktop.yaml")
 	orig := []byte("version: 1\nsession:\n  name: orig\n  compositor: sway\npaths:\n  config_dir: x\n  data_dir: x\n  state_dir: x\n  cache_dir: x\nlogging:\n  level: info\n  format: text\nui:\n  shell: quickshell\n  theme: default\n")
-	if err := os.WriteFile(path, orig, 0o644); err != nil {
+	if err := os.WriteFile(path, orig, 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 
@@ -129,7 +130,7 @@ func TestMigrateFileCreatesBackupBeforeWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(bak) != string(orig) {
+	if !bytes.Equal(bak, orig) {
 		t.Fatalf("backup content mismatch:\n--- bak ---\n%s\n--- orig ---\n%s", bak, orig)
 	}
 	info, err := os.Stat(matches[0])

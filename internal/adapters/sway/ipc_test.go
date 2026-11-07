@@ -1,6 +1,7 @@
 package sway
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 )
@@ -19,13 +20,13 @@ func TestMarshalMessageRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if length != uint32(len(payload)) {
+	if length != uint32(len(payload)) { //nolint:gosec // test file permissions
 		t.Fatalf("length %d, want %d", length, len(payload))
 	}
 	if typ != GetWorkspaces {
 		t.Fatalf("type %v, want %v", typ, GetWorkspaces)
 	}
-	if string(data[frameSize:]) != string(payload) {
+	if !bytes.Equal(data[frameSize:], payload) {
 		t.Fatal("payload mismatch")
 	}
 }

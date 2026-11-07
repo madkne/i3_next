@@ -30,7 +30,7 @@ func newFakeServer(t *testing.T, handle func(conn net.Conn)) *fakeServer {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		handle(conn)
 	}()
 	return s
@@ -68,7 +68,7 @@ func TestClientRequestReply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cl.Close()
+	defer func() { _ = cl.Close() }()
 
 	m, err := cl.RunCommand(ctx, "exec foot")
 	if err != nil {
@@ -114,7 +114,7 @@ func TestClientGetOutputsTreeInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cl.Close()
+	defer func() { _ = cl.Close() }()
 
 	for _, typ := range []MessageType{GetOutputs, GetTree, GetInputs} {
 		m, err := cl.Request(ctx, typ, nil)
@@ -149,7 +149,7 @@ func TestClientSubscribe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cl.Close()
+	defer func() { _ = cl.Close() }()
 
 	ch, err := cl.Subscribe(ctx, []string{"window", "workspace"})
 	if err != nil {

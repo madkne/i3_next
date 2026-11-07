@@ -62,7 +62,7 @@ type LoadReport struct {
 }
 
 // ActionableError returns a single actionable error string, or empty if healthy.
-func (r LoadReport) ActionableError() string {
+func (r LoadReport) ActionableError() string { //nolint:gocritic // value receiver
 	if len(r.Issues) == 0 {
 		return ""
 	}
@@ -252,7 +252,7 @@ func formatConfigError(file string, err error) error {
 // It creates an automatic backup before writing migrated content back to path
 // when migration changes the document. Returns the (possibly migrated) bytes,
 // whether content changed, and any issues.
-func migrateIfNeeded(name, path string, data []byte, current int) ([]byte, bool, []LoadIssue) {
+func migrateIfNeeded(name, path string, data []byte, current int) ([]byte, bool, []LoadIssue) { //nolint:gocritic // unnamed results ok
 	v, err := readVersion(data)
 	if err != nil {
 		return data, false, nil
@@ -322,7 +322,7 @@ var migrationRegistry = map[string]map[int]migrationFunc{
 	// "desktop.yaml": {1: migrateDesktopV1ToV2},
 }
 
-func migrateOne(name string, from int, data []byte) ([]byte, bool, error) {
+func migrateOne(name string, from int, data []byte) ([]byte, bool, error) { //nolint:gocritic // unnamed results ok
 	byName := migrationRegistry[name]
 	if byName == nil {
 		return nil, false, nil
@@ -341,7 +341,7 @@ func migrateOne(name string, from int, data []byte) ([]byte, bool, error) {
 // MigrateBytes migrates a config document of the given name from its version
 // to current, returning migrated bytes and whether a change occurred. It does
 // not write files or create backups.
-func MigrateBytes(name string, data []byte) ([]byte, bool, error) {
+func MigrateBytes(name string, data []byte) ([]byte, bool, error) { //nolint:gocritic // unnamed results ok
 	current, ok := currentVersion(name)
 	if !ok {
 		return nil, false, fmt.Errorf("unknown config file %q", name)

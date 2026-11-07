@@ -20,8 +20,8 @@ func (f *fragConn) Read(p []byte) (int, error) {
 
 func TestConnReadMessage(t *testing.T) {
 	s1, s2 := net.Pipe()
-	defer s1.Close()
-	defer s2.Close()
+	defer func() { _ = s1.Close() }()
+	defer func() { _ = s2.Close() }()
 	msg, err := MarshalMessage(Message{Type: GetWorkspaces, Payload: []byte("hello")})
 	if err != nil {
 		t.Fatal(err)
@@ -44,8 +44,8 @@ func TestConnReadMessage(t *testing.T) {
 
 func TestConnPartialReads(t *testing.T) {
 	s1, s2 := net.Pipe()
-	defer s1.Close()
-	defer s2.Close()
+	defer func() { _ = s1.Close() }()
+	defer func() { _ = s2.Close() }()
 	full, err := MarshalMessage(Message{Type: GetVersion, Payload: []byte("v1")})
 	if err != nil {
 		t.Fatal(err)
@@ -67,8 +67,8 @@ func TestConnPartialReads(t *testing.T) {
 
 func TestConnBadMagic(t *testing.T) {
 	s1, s2 := net.Pipe()
-	defer s1.Close()
-	defer s2.Close()
+	defer func() { _ = s1.Close() }()
+	defer func() { _ = s2.Close() }()
 	go func() {
 		_, _ = s2.Write([]byte("BADMAG\x00\x00\x00\x00\x00\x00\x00\x00"))
 	}()
@@ -80,7 +80,7 @@ func TestConnBadMagic(t *testing.T) {
 
 func TestConnEOF(t *testing.T) {
 	s1, s2 := net.Pipe()
-	s2.Close()
+	_ = s2.Close()
 	c := NewConn(s1)
 	_, err := c.ReadMessage()
 	if err != io.EOF {
@@ -90,11 +90,11 @@ func TestConnEOF(t *testing.T) {
 
 func TestConnUnexpectedEOF(t *testing.T) {
 	s1, s2 := net.Pipe()
-	defer s1.Close()
-	defer s2.Close()
+	defer func() { _ = s1.Close() }()
+	defer func() { _ = s2.Close() }()
 	go func() {
 		_, _ = s2.Write([]byte("i3-ipc\x00\x00\x00\x05"))
-		s2.Close()
+		_ = s2.Close()
 	}()
 	c := NewConn(s1)
 	_, err := c.ReadMessage()
@@ -105,8 +105,8 @@ func TestConnUnexpectedEOF(t *testing.T) {
 
 func TestConnWriteThenRead(t *testing.T) {
 	s1, s2 := net.Pipe()
-	defer s1.Close()
-	defer s2.Close()
+	defer func() { _ = s1.Close() }()
+	defer func() { _ = s2.Close() }()
 	c1 := NewConn(s1)
 	c2 := NewConn(s2)
 	go func() {

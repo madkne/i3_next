@@ -31,7 +31,7 @@ func TestLoadDesktopWithFallbackInvalidConfigUsesDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Invalid: unknown field (strict), actionable message expected.
-	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), []byte("version: 1\nnope: true\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), []byte("version: 1\nnope: true\n"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	report, err := LoadDesktopWithFallback(LoadOptions{})
@@ -67,7 +67,7 @@ func TestLoadDesktopWithFallbackInvalidUsesLastValid(t *testing.T) {
 		t.Fatal(err)
 	}
 	// First: valid config becomes last-valid.
-	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), validDesktopYAML("warn"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), validDesktopYAML("warn"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	okReport, err := LoadDesktopWithFallback(LoadOptions{})
@@ -81,7 +81,7 @@ func TestLoadDesktopWithFallbackInvalidUsesLastValid(t *testing.T) {
 		t.Fatalf("level=%q, want warn", okReport.Desktop.Logging.Level)
 	}
 	// Corrupt config: should fall back to last valid (warn), not defaults.
-	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), []byte("::not yaml:: ["), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), []byte("::not yaml:: ["), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	bad, err := LoadDesktopWithFallback(LoadOptions{})
@@ -108,7 +108,7 @@ func TestLoadDesktopWithFallbackCachesLastValidWith0600(t *testing.T) {
 	if err := os.MkdirAll(userDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), validDesktopYAML("info"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(userDir, "desktop.yaml"), validDesktopYAML("info"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	_, err := LoadDesktopWithFallback(LoadOptions{})
@@ -128,7 +128,7 @@ func TestLoadDesktopWithFallbackCachesLastValidWith0600(t *testing.T) {
 func TestValidateFileActionable(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "desktop.yaml")
-	if err := os.WriteFile(p, []byte("version: 1\nlogging:\n  level: info\n  unknown: x\n"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte("version: 1\nlogging:\n  level: info\n  unknown: x\n"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	err := ValidateFile("desktop.yaml", p)

@@ -10,9 +10,9 @@ import (
 )
 
 type Client struct {
-	conn   net.Conn
-	frame  *Conn
-	mu     sync.Mutex
+	conn  net.Conn
+	frame *Conn
+	mu    sync.Mutex
 
 	writeMu sync.Mutex
 
@@ -33,10 +33,10 @@ func Dial(ctx context.Context, address string) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{
-		conn:      conn,
-		frame:     NewConn(conn),
-		pending:   map[MessageType]chan Message{},
-		eventCh:   make(chan Message, 64),
+		conn:       conn,
+		frame:      NewConn(conn),
+		pending:    map[MessageType]chan Message{},
+		eventCh:    make(chan Message, 64),
 		readerDone: make(chan struct{}),
 	}
 	go c.reader()
@@ -48,7 +48,7 @@ func (c *Client) reader() {
 	for {
 		m, err := c.frame.ReadMessage()
 		if err != nil {
-			c.failAll(err)
+			c.failAll()
 			return
 		}
 		if IsEvent(m.Type) {
@@ -78,7 +78,7 @@ func (c *Client) reader() {
 	}
 }
 
-func (c *Client) failAll(err error) {
+func (c *Client) failAll() {
 	c.pendingMu.Lock()
 	for typ, ch := range c.pending {
 		select {
@@ -120,9 +120,6 @@ func (c *Client) Request(ctx context.Context, typ MessageType, payload []byte) (
 
 	select {
 	case reply := <-ch:
-		if reply.Type == 0 && reply.Payload == nil {
-			// could be failAll sentinel; check conn
-		}
 		return reply, nil
 	case <-ctx.Done():
 		c.pendingMu.Lock()

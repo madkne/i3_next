@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,10 +40,10 @@ func TestLoadDesktopMergedLayerOrder(t *testing.T) {
 	if err := os.MkdirAll(user, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(system, "desktop.yaml"), []byte("logging:\n  level: warn\nui:\n  theme: system\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(system, "desktop.yaml"), []byte("logging:\n  level: warn\nui:\n  theme: system\n"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(user, "desktop.yaml"), []byte("logging:\n  level: error\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(user, "desktop.yaml"), []byte("logging:\n  level: error\n"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 
@@ -77,10 +78,10 @@ func TestLoadDesktopMergedPrecedenceWithoutFlags(t *testing.T) {
 	if err := os.MkdirAll(user, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(system, "desktop.yaml"), []byte("logging:\n  level: warn\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(system, "desktop.yaml"), []byte("logging:\n  level: warn\n"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(user, "desktop.yaml"), []byte("logging:\n  level: error\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(user, "desktop.yaml"), []byte("logging:\n  level: error\n"), 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	t.Setenv("I3NEXT_DESKTOP_LOGGING_LEVEL", "debug")
@@ -115,7 +116,7 @@ func TestInstallDefaultsOEXCL(t *testing.T) {
 	// Modify a file; second install must not overwrite.
 	sentinel := []byte("version: 1\nsession:\n  name: custom\n  compositor: sway\npaths:\n  config_dir: x\n  data_dir: x\n  state_dir: x\n  cache_dir: x\nlogging:\n  level: info\n  format: text\nui:\n  shell: quickshell\n  theme: default\n")
 	target := filepath.Join(dir, "desktop.yaml")
-	if err := os.WriteFile(target, sentinel, 0o644); err != nil {
+	if err := os.WriteFile(target, sentinel, 0o644); err != nil { //nolint:gosec // test file permissions
 		t.Fatal(err)
 	}
 	if err := InstallDefaults(dir); err != nil {
@@ -125,7 +126,7 @@ func TestInstallDefaultsOEXCL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != string(sentinel) {
+	if !bytes.Equal(got, sentinel) {
 		t.Fatalf("desktop.yaml overwritten on second install")
 	}
 }

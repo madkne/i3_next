@@ -10,14 +10,14 @@ type Rect struct {
 }
 
 type Workspace struct {
-	Num         int    `json:"num"`
-	Name        string `json:"name"`
-	Visible     bool   `json:"visible"`
-	Focused     bool   `json:"focused"`
-	Urgent      bool   `json:"urgent"`
-	Rect        Rect   `json:"rect"`
-	Output      string `json:"output"`
-	Type        string `json:"type"`
+	Num            int    `json:"num"`
+	Name           string `json:"name"`
+	Visible        bool   `json:"visible"`
+	Focused        bool   `json:"focused"`
+	Urgent         bool   `json:"urgent"`
+	Rect           Rect   `json:"rect"`
+	Output         string `json:"output"`
+	Type           string `json:"type"`
 	Representation string `json:"representation"`
 }
 
@@ -30,16 +30,16 @@ func UnmarshalWorkspaces(payload []byte) ([]Workspace, error) {
 }
 
 type Output struct {
-	ID              int    `json:"id"`
-	Name            string `json:"name"`
-	Active          bool   `json:"active"`
-	CurrentWorkspace string `json:"current_workspace"`
-	Rect            Rect   `json:"rect"`
-	Scale           float64 `json:"scale"`
-	Transform       string `json:"transform"`
-	Make            string `json:"make"`
-	Model           string `json:"model"`
-	Serial          string `json:"serial"`
+	ID               int     `json:"id"`
+	Name             string  `json:"name"`
+	Active           bool    `json:"active"`
+	CurrentWorkspace string  `json:"current_workspace"`
+	Rect             Rect    `json:"rect"`
+	Scale            float64 `json:"scale"`
+	Transform        string  `json:"transform"`
+	Make             string  `json:"make"`
+	Model            string  `json:"model"`
+	Serial           string  `json:"serial"`
 }
 
 func UnmarshalOutputs(payload []byte) ([]Output, error) {
@@ -51,31 +51,31 @@ func UnmarshalOutputs(payload []byte) ([]Output, error) {
 }
 
 type Node struct {
-	ID                 int      `json:"id"`
-	Name               string   `json:"name"`
-	Type               string   `json:"type"`
-	Border             string   `json:"border"`
-	CurrentBorderWidth int      `json:"current_border_width"`
-	Layout             string   `json:"layout"`
-	Orientation        string   `json:"orientation"`
-	Percent            float64  `json:"percent"`
-	Rect               Rect     `json:"rect"`
-	WindowRect         Rect     `json:"window_rect"`
-	DecoRect           Rect     `json:"deco_rect"`
-	Geometry           Rect     `json:"geometry"`
-	Window             int      `json:"window"`
-	Urgent             bool     `json:"urgent"`
-	Focused            bool     `json:"focused"`
-	Focus              []int    `json:"focus"`
-	Floating           string   `json:"floating"`
-	Sticky             bool     `json:"sticky"`
-	PID                int      `json:"pid"`
-	AppID              string   `json:"app_id"`
+	ID                 int            `json:"id"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Border             string         `json:"border"`
+	CurrentBorderWidth int            `json:"current_border_width"`
+	Layout             string         `json:"layout"`
+	Orientation        string         `json:"orientation"`
+	Percent            float64        `json:"percent"`
+	Rect               Rect           `json:"rect"`
+	WindowRect         Rect           `json:"window_rect"`
+	DecoRect           Rect           `json:"deco_rect"`
+	Geometry           Rect           `json:"geometry"`
+	Window             int            `json:"window"`
+	Urgent             bool           `json:"urgent"`
+	Focused            bool           `json:"focused"`
+	Focus              []int          `json:"focus"`
+	Floating           string         `json:"floating"`
+	Sticky             bool           `json:"sticky"`
+	PID                int            `json:"pid"`
+	AppID              string         `json:"app_id"`
 	WindowProperties   map[string]any `json:"window_properties"`
-	Nodes              []Node   `json:"nodes"`
-	FloatingNodes      []Node   `json:"floating_nodes"`
-	Marks              []string `json:"marks"`
-	FullscreenMode     int      `json:"fullscreen_mode"`
+	Nodes              []Node         `json:"nodes"`
+	FloatingNodes      []Node         `json:"floating_nodes"`
+	Marks              []string       `json:"marks"`
+	FullscreenMode     int            `json:"fullscreen_mode"`
 }
 
 func UnmarshalTree(payload []byte) (*Node, error) {
@@ -87,14 +87,14 @@ func UnmarshalTree(payload []byte) (*Node, error) {
 }
 
 type Input struct {
-	Identifier        string   `json:"identifier"`
-	Name              string   `json:"name"`
-	Vendor            int      `json:"vendor"`
-	Product           int      `json:"product"`
-	Type              string   `json:"type"`
-	XKBLayouts        []string `json:"xkb_layouts"`
-	XKBCurrentLayout  string   `json:"xkb_current_layout_index"`
-	Libinput          map[string]any `json:"libinput"`
+	Identifier       string         `json:"identifier"`
+	Name             string         `json:"name"`
+	Vendor           int            `json:"vendor"`
+	Product          int            `json:"product"`
+	Type             string         `json:"type"`
+	XKBLayouts       []string       `json:"xkb_layouts"`
+	XKBCurrentLayout string         `json:"xkb_current_layout_index"`
+	Libinput         map[string]any `json:"libinput"`
 }
 
 func UnmarshalInputs(payload []byte) ([]Input, error) {
@@ -106,9 +106,9 @@ func UnmarshalInputs(payload []byte) ([]Input, error) {
 }
 
 type BarConfig struct {
-	ID       string `json:"id"`
-	Mode     string `json:"mode"`
-	Position string `json:"position"`
+	ID            string `json:"id"`
+	Mode          string `json:"mode"`
+	Position      string `json:"position"`
 	StatusCommand string `json:"status_command"`
 }
 

@@ -31,7 +31,7 @@ func TestParseAllFiles(t *testing.T) {
 		"shortcuts.yaml": func(b []byte) error { _, e := ParseShortcuts(b); return e },
 	}
 	for name, fn := range cases {
-		b, _ := os.ReadFile(filepath.Join("../../../configs/defaults", name))
+		b, _ := os.ReadFile(filepath.Join("..", "..", "..", "configs", "defaults", name))
 		if err := fn(b); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

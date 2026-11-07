@@ -23,7 +23,7 @@ func NewWatcher(dir string, debounce time.Duration, reload func()) (*Watcher, er
 		return nil, err
 	}
 	if err := w.Add(dir); err != nil {
-		w.Close()
+		_ = w.Close()
 		return nil, err
 	}
 	if debounce <= 0 {

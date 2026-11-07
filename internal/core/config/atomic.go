@@ -21,17 +21,17 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
 	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		cleanup()
 		return fmt.Errorf("chmod temp: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		cleanup()
 		return fmt.Errorf("write temp: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		cleanup()
 		return fmt.Errorf("sync temp: %w", err)
 	}
@@ -48,7 +48,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("open dir: %w", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := d.Sync(); err != nil {
 		return fmt.Errorf("sync dir: %w", err)
 	}
