@@ -184,6 +184,10 @@ run_test gofmt                 t_gofmt
 run_test go_vet                t_go_vet
 run_test go_test_race          t_go_test
 
+echo "config (CFG-07/08)"
+run_test cfg07_invalid_degrades_no_restart t_cfg07_invalid_config_degrades_no_restart_loop
+run_test cfg07_invalid_uses_last_valid     t_cfg07_invalid_uses_last_valid_cache
+
 echo "daemon"
 run_test daemon_lifecycle      t_daemon_lifecycle
 
@@ -207,3 +211,97 @@ else
 fi
 
 summary
+
+# ---- tests: config (CFG-07/08) ---------------------------------------------
+t_cfg07_invalid_config_degrades_no_restart_loop() {
+  local root log pid rc=0 i prev_size=0 stable=0
+  root="$(mktemp -d)"
+  log="$ARTIFACT_DIR/cfg07-i3-nextd.log"
+  mkdir -p "$root/config/i3-next" "$root/state" "$root/data" "$root/cache" "$root/run"
+  chmod 700 "$root/run"
+  cat >"$root/config/i3-next/desktop.yaml" <<'YAML'
+version: 1
+not_a_valid_key: true
+YAML
+
+  XDG_CONFIG_HOME="$root/config" \
+  XDG_STATE_HOME="$root/state" \
+  XDG_DATA_HOME="$root/data" \
+  XDG_CACHE_HOME="$root/cache" \
+  XDG_RUNTIME_DIR="$root/run" \
+  "$BIN/i3-nextd" --debug >"$log" 2>&1 &
+  pid=$!
+
+  retry 50 0.1 grep -q 'starting i3_next desktop core' "$log" ||
+    { kill -9 "$pid" 2>/dev/null || true; echo "daemon did not start"; tail -n 40 "$log"; return 1; }
+
+  # Must not restart-loop: log size should stabilize while process stays alive.
+  for i in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || { echo "daemon exited unexpectedly"; tail -n 60 "$log"; return 1; }
+    size=$(wc -c <"$log" 2>/dev/null || echo 0)
+    if [ "$size" -eq "$prev_size" ]; then stable=$((stable+1)); else stable=0; fi
+    prev_size="$size"
+    [ "$stable" -ge 6 ] && break
+    sleep 0.15
+  done
+  kill -0 "$pid" 2>/dev/null || { echo "daemon not running after observation window"; return 1; }
+
+  grep -Eqi 'degraded|configuration degraded|using fallback|last valid|default config' "$log" ||
+    { echo "missing degraded/actionable config error in log"; tail -n 80 "$log"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+  grep -Eqi 'desktop\.yaml|not_a_valid_key|field|line|actionable|fix' "$log" ||
+    { echo "missing actionable config detail"; tail -n 80 "$log"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+
+  kill -TERM "$pid" 2>/dev/null || true
+  ( sleep 5; kill -KILL "$pid" 2>/dev/null || true ) & wd=$!
+  wait "$pid" || rc=$?
+  kill "$wd" 2>/dev/null || true
+  [ "$rc" -eq 0 ] || { echo "exit code $rc"; return 1; }
+}
+
+t_cfg07_invalid_uses_last_valid_cache() {
+  local root log pid rc=0
+  root="$(mktemp -d)"
+  mkdir -p "$root/config/i3-next" "$root/state" "$root/data" "$root/cache" "$root/run"
+  chmod 700 "$root/run"
+  cat >"$root/config/i3-next/desktop.yaml" <<'YAML'
+version: 1
+session:
+  name: i3_next
+  compositor: sway
+paths:
+  config_dir: ~/.config/i3-next
+  data_dir: ~/.local/share/i3-next
+  state_dir: ~/.local/state/i3-next
+  cache_dir: ~/.cache/i3-next
+logging:
+  level: warn
+  format: text
+ui:
+  shell: quickshell
+  theme: default
+YAML
+
+  log="$ARTIFACT_DIR/cfg07-valid.log"
+  XDG_CONFIG_HOME="$root/config" XDG_STATE_HOME="$root/state" XDG_DATA_HOME="$root/data" \
+  XDG_CACHE_HOME="$root/cache" XDG_RUNTIME_DIR="$root/run" \
+  "$BIN/i3-nextd" --debug >"$log" 2>&1 & pid=$!
+  retry 50 0.1 grep -q 'starting i3_next desktop core' "$log" || { kill -9 "$pid" 2>/dev/null || true; return 1; }
+  kill -TERM "$pid"; wait "$pid" || true
+
+  test -s "$root/state/i3-next/config/last-valid/desktop.yaml" || { echo "missing last-valid cache"; return 1; }
+
+  cat >"$root/config/i3-next/desktop.yaml" <<'YAML'
+::broken
+YAML
+  log="$ARTIFACT_DIR/cfg07-broken.log"
+  XDG_CONFIG_HOME="$root/config" XDG_STATE_HOME="$root/state" XDG_DATA_HOME="$root/data" \
+  XDG_CACHE_HOME="$root/cache" XDG_RUNTIME_DIR="$root/run" \
+  "$BIN/i3-nextd" --debug >"$log" 2>&1 & pid=$!
+  retry 50 0.1 grep -q 'starting i3_next desktop core' "$log" || { kill -9 "$pid" 2>/dev/null || true; tail -n 40 "$log"; return 1; }
+  grep -Eqi 'last.valid|last valid|using fallback' "$log" || { echo "expected last-valid fallback"; tail -n 60 "$log"; kill -TERM "$pid" 2>/dev/null || true; return 1; }
+  kill -TERM "$pid" 2>/dev/null || true
+  ( sleep 5; kill -KILL "$pid" 2>/dev/null || true ) & wd=$!
+  wait "$pid" || rc=$?
+  kill "$wd" 2>/dev/null || true
+  [ "$rc" -eq 0 ]
+}

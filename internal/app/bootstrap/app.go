@@ -117,6 +117,7 @@ type App struct {
 	state         string
 	services      []any
 	startupHooks  []func(context.Context) error
+	configReport  *ConfigReport
 
 	lockFile *os.File
 }

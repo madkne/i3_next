@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"i3_next/internal/app/bootstrap"
+	"i3_next/internal/core/config"
 	"i3_next/internal/core/logging"
 	"i3_next/internal/version"
 )
@@ -34,7 +35,7 @@ func main() {
 		syscall.SIGTERM,
 	)
 
-	app, err := bootstrap.New(logger)
+	app, err := bootstrap.New(logger, bootstrap.WithConfig(config.LoadOptions{Env: true}))
 	if err != nil {
 		logger.Error("failed to initialize application",
 			slog.Any("error", err))

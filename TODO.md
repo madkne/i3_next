@@ -118,8 +118,8 @@
 - [x] **CFG-04** (P0) Documented and built layer order: defaults < `/etc/i3-next` < `~/.config/i3-next` < env (`I3NEXT_*`) < flags. ✅ Merge test.
 - [x] **CFG-05** (P0) Install defaults on first run with `O_EXCL` (never overwrite). ✅ Idempotency test.
 - [x] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test."
-- [ ] **CFG-07** (P0) Invalid config: the daemon starts with the last valid config (or defaults), state is `degraded` with an actionable error; no restart loop. ✅ e2e.
-- [ ] **CFG-08** (P1) Versioned migration (`vN ⟶ vN+1`) with an automatic backup first, and a golden-file test.
+- [x] **CFG-07** (P0) Invalid config: the daemon starts with the last valid config (or defaults), state is `degraded` with an actionable error; no restart loop. ✅ `LoadDesktopWithFallback` + `bootstrap.WithConfig` + e2e `t_cfg07_*`.
+- [x] **CFG-08** (P1) Versioned migration (`vN ⟶ vN+1`) with an automatic backup first, and a golden-file test. ✅ `MigrateBytes`/`migrateIfNeeded` registry + backup + golden `testdata/golden/desktop.v1-v2.yaml`.
 - [ ] **CFG-09** (P1) Safe reload (SIGHUP + `config.reload` API): compute a diff; report non-reloadable keys clearly.
 - [ ] **CFG-10** (P1) `i3-nextctl config validate|show|backup|restore`. ⛓ OBS-05
 - [ ] **CFG-11** (P1) `docs/config/` full key reference (generated from the schema) plus examples.
@@ -383,7 +383,7 @@
 - [ ] Audio/network/battery are reported correctly (SVC-04..06)
 - [ ] Lock/logout/reboot/shutdown are safe; lock fails closed (SVC-07, SES-05)
 - [ ] If the backend disconnects the UI does not die and it reconnects (UI-01, API-09)
-- [ ] Broken config does not lose the session or cause a restart loop (CFG-07)
+- [x] Broken config does not lose the session or cause a restart loop (CFG-07)
 - [ ] Uninstall/upgrade do not delete user data (PKG-11)
 - [ ] CI is green; no open blocker/critical bugs
 - [ ] `govulncheck` and dependency scan show no critical findings (SEC-04)
@@ -399,7 +399,7 @@
 | # | Milestone | Sections | Exit criteria (measurable) |
 |---|---|---|---|
 | M0 | Scope & quick wins | 0, 1 (`FIX-*`) | All P0 `FIX-*` closed; `make`, `make check`, `make vm-test` green; one version everywhere |
-| M1 | Core runtime | 2, 3, 12 | Daemon with fake services: order/rollback/shutdown/supervisor/config tested; real `nextctl status` |
+| M1 | Core runtime | 2, 3, 12 | Daemon with fake services: order/rollback/shutdown/supervisor/config tested; real `nextctl status` (config fallback/migration done: CFG-07/08) |
 | M2 | Sway & API | 4, 5 | e2e: daemon ⟷ headless Sway, reconnect, JSON-RPC with version + peercred, contract tests |
 | M3 | First usable shell | 6, 7 (Must) | Panel + launcher + session menu on the VM; multi-monitor; UI reconnect |
 | M4 | Session | 8, 13 | Login from the DM in the VM with no manual steps; clean logout; recovery documented |

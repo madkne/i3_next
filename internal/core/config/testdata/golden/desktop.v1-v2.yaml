@@ -1,0 +1,16 @@
+logging:
+    format: text
+    level: info
+paths:
+    cache_dir: x
+    config_dir: x
+    data_dir: x
+    state_dir: x
+session:
+    compositor: sway
+    name: i3_next
+ui:
+    animations: true
+    shell: quickshell
+    theme: default
+version: 2
