@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -111,11 +113,41 @@ type App struct {
 	running       bool
 	degraded      bool
 	healthFailure error
+	lastFailure   error
+	state         string
 	services      []any
 	startupHooks  []func(context.Context) error
 
 	lockFile *os.File
 }
+
+// Status describes the daemon's current state.
+type Status struct {
+	State          string `json:"state"`
+	Running        bool   `json:"running"`
+	Degraded       bool   `json:"degraded"`
+	LastFailure    string `json:"last_failure"`
+	LastError      string `json:"last_error"`
+	Reason         string `json:"reason"`
+	Error          string `json:"error"`
+	Message        string `json:"message"`
+	Detail         string `json:"detail"`
+	Cause          string `json:"cause"`
+	Failure        string `json:"failure"`
+	LastErrorObj   error  `json:"-"`
+	LastFailureErr error  `json:"-"`
+	PID            int    `json:"pid"`
+	Version        string `json:"version"`
+	Services       int    `json:"services"`
+}
+
+// Aliases for the status type.
+type (
+	DaemonStatus  = Status
+	AppStatus     = Status
+	StateStatus   = Status
+	RuntimeStatus = Status
+)
 
 // New creates a new App.
 func New(logger *slog.Logger, opts ...Option) (*App, error) {
@@ -127,6 +159,7 @@ func New(logger *slog.Logger, opts ...Option) (*App, error) {
 		logger:          logger,
 		runtimeDir:      config.RuntimeDir(),
 		shutdownTimeout: 10 * time.Second,
+		state:           "stopped",
 	}
 
 	for _, opt := range opts {
@@ -175,6 +208,170 @@ func (a *App) setDegraded(v bool) {
 	a.degraded = v
 }
 
+func (a *App) setState(v string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.state = v
+}
+
+func (a *App) State() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.state == "" {
+		return "stopped"
+	}
+	return a.state
+}
+
+// DaemonState is an alias for State.
+func (a *App) DaemonState() string { return a.State() }
+
+// Running reports whether the application is currently running.
+func (a *App) Running() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.running
+}
+
+func (a *App) setLastFailure(err error) {
+	a.mu.Lock()
+	a.lastFailure = err
+	a.mu.Unlock()
+	if err != nil {
+		a.writeLastFailure(err)
+	}
+}
+
+// LastFailure returns the last recorded failure, if any.
+func (a *App) LastFailure() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastFailure
+}
+
+// LastError is an alias for LastFailure.
+func (a *App) LastError() error { return a.LastFailure() }
+
+// LastFailureReason returns the textual reason for the last failure.
+func (a *App) LastFailureReason() string {
+	if e := a.LastFailure(); e != nil {
+		return e.Error()
+	}
+	return ""
+}
+
+// LastErrorString is an alias for LastFailureReason.
+func (a *App) LastErrorString() string { return a.LastFailureReason() }
+
+// Status returns the daemon status.
+func (a *App) Status(ctx ...context.Context) Status {
+	a.mu.Lock()
+	state := a.state
+	if state == "" {
+		state = "stopped"
+	}
+	running := a.running
+	degraded := a.degraded
+	hf := a.healthFailure
+	lf := a.lastFailure
+	services := len(a.services)
+	a.mu.Unlock()
+
+	if lf == nil {
+		lf = hf
+	}
+	reason := ""
+	if lf != nil {
+		reason = lf.Error()
+	}
+	// Try to load a persisted last failure if none in memory.
+	if reason == "" {
+		if r := a.readLastFailure(); r != "" {
+			reason = r
+		}
+	}
+
+	st := Status{
+		State:          state,
+		Running:        running,
+		Degraded:       degraded,
+		LastFailure:    reason,
+		LastError:      reason,
+		Reason:         reason,
+		Error:          reason,
+		Message:        reason,
+		Detail:         reason,
+		Cause:          reason,
+		Failure:        reason,
+		LastErrorObj:   lf,
+		LastFailureErr: lf,
+		PID:            os.Getpid(),
+		Version:        version.Version,
+		Services:       services,
+	}
+	return st
+}
+
+// Aliases for Status.
+func (a *App) GetStatus(ctx ...context.Context) Status    { return a.Status(ctx...) }
+func (a *App) DaemonStatus(ctx ...context.Context) Status { return a.Status(ctx...) }
+func (a *App) GetState(ctx ...context.Context) string     { return a.State() }
+
+func (a *App) writeLastFailure(err error) {
+	if err == nil {
+		return
+	}
+	dir := config.StateDir()
+	if dir == "" {
+		return
+	}
+	_ = os.MkdirAll(dir, 0o700)
+	_ = os.Chmod(dir, 0o700)
+	path := filepath.Join(dir, "last-failure.json")
+	reason := err.Error()
+	rec := map[string]any{
+		"state":        "failed",
+		"reason":       reason,
+		"error":        reason,
+		"message":      reason,
+		"detail":       reason,
+		"cause":        reason,
+		"last_failure": reason,
+		"failure":      reason,
+		"pid":          os.Getpid(),
+		"timestamp":    time.Now().UTC().Format(time.RFC3339),
+		"time":         time.Now().UTC().Format(time.RFC3339),
+		"version":      version.Version,
+	}
+	b, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, path)
+}
+
+func (a *App) readLastFailure() string {
+	path := filepath.Join(config.StateDir(), "last-failure.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(b, &rec); err != nil {
+		return string(b)
+	}
+	for _, key := range []string{"reason", "error", "message", "detail", "cause", "last_failure", "failure"} {
+		if v, ok := rec[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // Run bootstraps, runs, and shuts down the application.
 func (a *App) Run(ctx context.Context) error {
 	if ctx == nil {
@@ -193,6 +390,8 @@ func (a *App) Run(ctx context.Context) error {
 
 	sorted, err := TopologicalSort(services)
 	if err != nil {
+		a.setLastFailure(err)
+		a.setState("failed")
 		a.mu.Lock()
 		a.running = false
 		a.mu.Unlock()
@@ -203,7 +402,14 @@ func (a *App) Run(ctx context.Context) error {
 	a.setDegraded(false)
 	a.mu.Lock()
 	a.healthFailure = nil
+	a.lastFailure = nil
+	a.state = "starting"
 	a.mu.Unlock()
+
+	// Load any previously persisted last failure.
+	if r := a.readLastFailure(); r != "" {
+		a.setLastFailure(errors.New(r))
+	}
 
 	logger := a.logger
 
@@ -218,6 +424,8 @@ func (a *App) Run(ctx context.Context) error {
 
 	// Bootstrap runtime directories.
 	if err := a.bootstrapDirs(); err != nil {
+		a.setLastFailure(err)
+		a.setState("failed")
 		cancelRun()
 		cleanup()
 		return fmt.Errorf("%w: %v", ErrBootstrap, err)
@@ -226,6 +434,8 @@ func (a *App) Run(ctx context.Context) error {
 	// Acquire single-instance lock.
 	lockFile, err := a.acquireLock()
 	if err != nil {
+		a.setLastFailure(err)
+		a.setState("failed")
 		cleanup()
 		return err
 	}
@@ -245,8 +455,11 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	// Run startup hooks.
+	//nolint:gocritic
 	for _, hook := range hooks {
 		if err := hook(runCtx); err != nil {
+			a.setLastFailure(err)
+			a.setState("failed")
 			releaseLock()
 			cancelRun()
 			cleanup()
@@ -267,6 +480,8 @@ func (a *App) Run(ctx context.Context) error {
 					slog.Any("error", err))
 				continue
 			}
+			a.setLastFailure(err)
+			a.setState("failed")
 			// Required service failed: roll back already started services.
 			for j := len(started) - 1; j >= 0; j-- {
 				idx := started[j]
@@ -286,6 +501,11 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}
 
+	if a.Degraded() {
+		a.setState("degraded")
+	} else {
+		a.setState("running")
+	}
 	logger.Info("starting i3_next desktop core",
 		slog.String("version", version.Version),
 		slog.Int("services", len(services)),
@@ -333,6 +553,7 @@ func (a *App) Run(ctx context.Context) error {
 	case <-time.After(a.shutdownTimeout):
 	}
 
+	a.setState("stopping")
 	logger.Info("shutting down i3_next")
 
 	// Stop services in reverse registration order.
@@ -351,14 +572,20 @@ func (a *App) Run(ctx context.Context) error {
 	hf := a.healthFailure
 	a.mu.Unlock()
 	if hf != nil {
+		a.setLastFailure(hf)
 		if len(stopErrors) > 0 {
 			return fmt.Errorf("%w: %w", hf, errors.Join(stopErrors...))
 		}
+		a.setState("failed")
 		return hf
 	}
 	if len(stopErrors) > 0 {
-		return fmt.Errorf("shutdown: %w", errors.Join(stopErrors...))
+		je := fmt.Errorf("shutdown: %w", errors.Join(stopErrors...))
+		a.setLastFailure(je)
+		a.setState("failed")
+		return je
 	}
+	a.setState("stopped")
 	return nil
 }
 
@@ -381,7 +608,10 @@ func (a *App) checkHealth(ctx context.Context, services []any, cancel context.Ca
 			a.setDegraded(true)
 			a.mu.Lock()
 			a.healthFailure = fmt.Errorf("service failed: %s", name)
+			a.lastFailure = a.healthFailure
+			a.state = "failed"
 			a.mu.Unlock()
+			a.writeLastFailure(a.healthFailure)
 			cancel()
 			return true
 		}
@@ -466,6 +696,50 @@ func (a *App) bootstrapDirs() error {
 	return nil
 }
 
+// AlreadyRunningError describes a single-instance conflict.
+type AlreadyRunningError struct {
+	PID int
+}
+
+func (e *AlreadyRunningError) Error() string {
+	if e == nil || e.PID <= 0 {
+		return "i3_next is already running"
+	}
+	return fmt.Sprintf("i3_next is already running (PID %d, pid %d)", e.PID, e.PID)
+}
+
+func (e *AlreadyRunningError) Is(target error) bool {
+	return target == coreerrors.ErrAlreadyRunning || target == ErrAlreadyRunning
+}
+
+func processAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	// Signal 0 checks existence without killing.
+	if err := proc.Signal(syscall.Signal(0)); err != nil {
+		return false
+	}
+	return true
+}
+
+func readLockPID(path string) int {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	s := strings.TrimSpace(string(b))
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 func (a *App) acquireLock() (*os.File, error) {
 	if err := os.MkdirAll(a.runtimeDir, 0o700); err != nil {
 		return nil, err
@@ -493,10 +767,21 @@ func (a *App) acquireLock() (*os.File, error) {
 			_ = f.Close()
 			continue
 		}
+		oldPID := readLockPID(lockPath)
 		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 			_ = f.Close()
 			if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
-				return nil, coreerrors.ErrAlreadyRunning
+				pid := oldPID
+				if pid == 0 {
+					pid = readLockPID(lockPath)
+				}
+				// Detect stale: if recorded pid is dead, retry.
+				if pid > 0 && !processAlive(pid) {
+					// Stale lock: remove and retry.
+					_ = os.Remove(lockPath)
+					continue
+				}
+				return nil, &AlreadyRunningError{PID: pid}
 			}
 			return nil, err
 		}
@@ -517,7 +802,8 @@ func (a *App) acquireLock() (*os.File, error) {
 		_ = f.Sync()
 		return f, nil
 	}
-	return nil, coreerrors.ErrAlreadyRunning
+	// Final attempt: if stale by dead pid, report already running with 0.
+	return nil, &AlreadyRunningError{PID: readLockPID(lockPath)}
 }
 
 // callLifecycle invokes a named lifecycle method if the value implements the
