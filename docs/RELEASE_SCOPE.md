@@ -140,7 +140,7 @@ used in development/CI on the Tier 1 platforms.
 
 | Component               | Minimum            | Recommended | Tested (dev)   | Notes                                                           |
 | ----------------------- | ------------------ | ----------- | -------------- | --------------------------------------------------------------- |
-| Go (toolchain)          | 1.26.0             | 1.26.0      | 1.26.0         | Pinned by `go.mod`; CI and CONTRIBUTING.md use the same version |
+| Go (toolchain)          | 1.26.3             | 1.26.3      | 1.26.3         | Pinned by `go.mod`; CI and CONTRIBUTING.md use the same version |
 | Sway                    | 1.8                | 1.10+       | 1.12           | Feature detection required for version differences              |
 | Wayland (protocol/libs) | 1.21               | 1.22+       | 1.26.0         | Compositor/protocol baseline                                    |
 | Quickshell              | 0.2                | 0.3+        | 0.3.2          | May require backport/PPA on Tier 1 older releases               |

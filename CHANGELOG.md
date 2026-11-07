@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
+- Bump the minimum Go toolchain to 1.26.3 so CI uses standard-library security fixes required by `govulncheck`.
 
 ### Security
 

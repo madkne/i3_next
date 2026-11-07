@@ -1,7 +1,7 @@
 module i3_next
 
-// FIX on 1.26.0 (if no have any problems with that)
-go 1.26.0
+// Go 1.26.3 includes fixes for standard-library vulnerabilities reported by govulncheck.
+go 1.26.3
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0

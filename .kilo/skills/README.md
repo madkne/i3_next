@@ -33,7 +33,7 @@ from the `samber/cc-skills-golang` collection and tailored to this repository.
 
 ## Project constraints
 
-- `go.mod` currently targets Go 1.26.0. Do not use APIs requiring a newer Go version
+- `go.mod` currently targets Go 1.26.3. Do not use APIs requiring a newer Go version
   without an explicit toolchain decision.
 - Follow `docs/architecture/OVERVIEW.md` and `docs/development/dependency-policy.md`.
 - Do not run Sway on the host. All compositor-dependent verification belongs in the

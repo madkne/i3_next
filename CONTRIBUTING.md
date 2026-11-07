@@ -7,7 +7,7 @@ submitting changes.
 ## Prerequisites
 
 - Linux (Ubuntu LTS 24.04 or Debian Stable 13 are the primary targets)
-- Go 1.26.0 or newer
+- Go 1.26.3 or newer
 - Git
 - `make`
 - Optional but recommended: `golangci-lint`, `staticcheck`, `shellcheck`
