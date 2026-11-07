@@ -396,11 +396,21 @@ func (a *App) checkHealth(ctx context.Context, services []any, cancel context.Ca
 	return false
 }
 
-func (a *App) stopService(svc any, timeout time.Duration) error {
+func (a *App) stopService(svc any, defaultTimeout time.Duration) error {
 	stopper, ok := svc.(Stopper)
 	if !ok {
 		return nil
 	}
+	// A service may declare its own shutdown timeout, overriding the
+	// (global) default passed in.
+	timeout := serviceShutdownTimeout(svc, defaultTimeout)
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	if timeout <= 0 {
+		timeout = a.shutdownTimeout
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -421,8 +431,11 @@ func (a *App) stopService(svc any, timeout time.Duration) error {
 		}
 		return r.err
 	case <-ctx.Done():
-		a.logger.Error("service stop timed out",
-			slog.String("service", componentName(svc)))
+		// Best-effort: try to kill a stuck service if it supports it.
+		killService(svc, a.logger)
+		a.logger.Error("service stop timed out; killed",
+			slog.String("service", componentName(svc)),
+			slog.Duration("timeout", timeout))
 		return fmt.Errorf("%w: %w: stop %s: timeout", ErrBootstrap, coreerrors.ErrTimeout, componentName(svc))
 	}
 }
@@ -533,6 +546,113 @@ func callLifecycle(ctx context.Context, v any, name string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// unwrapService returns the underlying service if svc is a known wrapper.
+func unwrapService(v any) any {
+	for {
+		switch w := v.(type) {
+		case registry.RequiredService:
+			v = w.Service
+		case *registry.RequiredService:
+			if w != nil {
+				v = w.Service
+				continue
+			}
+			return v
+		case registry.OptionalService:
+			v = w.Service
+		case *registry.OptionalService:
+			if w != nil {
+				v = w.Service
+				continue
+			}
+			return v
+		default:
+			return v
+		}
+	}
+}
+
+var shutdownTimeoutMethodNames = []string{
+	"ShutdownTimeout",
+	"StopTimeout",
+	"ShutdownGrace",
+	"GracePeriod",
+	"StopDeadline",
+	"ShutdownDeadline",
+	"Timeout",
+}
+
+var shutdownTimeoutFieldNames = []string{
+	"ShutdownTimeout",
+	"StopTimeout",
+	"GracePeriod",
+	"Timeout",
+}
+
+// serviceShutdownTimeout resolves a per-service shutdown timeout, if the
+// service declares one; otherwise fallback is returned.
+func serviceShutdownTimeout(v any, fallback time.Duration) time.Duration {
+	v = unwrapService(v)
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
+		rv = rv.Elem()
+		// keep original for method calls on pointer
+	}
+	orig := reflect.ValueOf(unwrapService(v))
+
+	// Methods.
+	for _, name := range shutdownTimeoutMethodNames {
+		if m := orig.MethodByName(name); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0) == reflect.TypeOf(time.Duration(0)) {
+				if d := time.Duration(m.Call(nil)[0].Int()); d > 0 {
+					return d
+				}
+			}
+		}
+	}
+	// Fields (on struct value).
+	if rv.IsValid() && rv.Kind() == reflect.Struct {
+		for _, name := range shutdownTimeoutFieldNames {
+			if f := rv.FieldByName(name); f.IsValid() && f.Type() == reflect.TypeOf(time.Duration(0)) {
+				if d := time.Duration(f.Int()); d > 0 {
+					return d
+				}
+			}
+		}
+	}
+	return fallback
+}
+
+// killService attempts a best-effort kill of a stuck service.
+func killService(svc any, logger *slog.Logger) {
+	svc = unwrapService(svc)
+	rv := reflect.ValueOf(svc)
+	killMethodNames := []string{"Kill", "Terminate", "Abort", "Cancel"}
+	for _, name := range killMethodNames {
+		if m := rv.MethodByName(name); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() <= 1 {
+				func() {
+					defer func() { recover() }()
+					m.Call(nil)
+				}()
+				return
+			}
+			if mt.NumIn() == 1 && mt.In(0) == reflect.TypeOf((*context.Context)(nil)).Elem() && mt.NumOut() <= 1 {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				func() {
+					defer func() { recover() }()
+					m.Call([]reflect.Value{reflect.ValueOf(ctx)})
+				}()
+				return
+			}
+		}
+	}
+	_ = logger
 }
 
 func componentName(v any) string {
