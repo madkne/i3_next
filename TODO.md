@@ -1,432 +1,531 @@
-# i3_next — Production v1 Release TODO
+# i3_next — TODO
 
-> Goal: take the repo from today's state (daemon skeleton, basic CLI, QML stubs) to a first version that people can install, use, and get support for.
+> **Goal:** ship `v1.0.0` (a complete Sway-based desktop session people can install and use), then the differentiating features from [`docs/new_features.md`](docs/new_features.md).
 >
-> **Definition of Done:** an item is checked only when: 1) the code is written, 2) related tests (unit/integration/e2e) pass in CI, 3) the needed docs are written, 4) `make check` and `make vm-test` pass.
->
-> **Legend**
->
-> | Mark | Meaning |
-> |---|---|
-> | `P0` | Release blocker |
-> | `P1` | Expected in v1 |
-> | `P2` | Can move to v1.x if time is short |
-> | `⛓ X` | Depends on task X |
-> | `✅` | Testable acceptance criteria |
->
-> ID prefixes: `FIX` quick fixes, `CORE`, `CFG`, `SWAY`, `API`, `UI`, `SVC`, `DBUS`, `PLG`, `STO`, `SEC`, `OBS`, `SES`, `PKG`, `QA`, `PERF`, `DOC`, `CI`.
+> This file is the single source of truth for planned work. The complete structure rules are in [`docs/development/todo-structure.md`](docs/development/todo-structure.md) — **edit the content, keep the structure** (section 0 below is the short version).
 
 ---
 
-## 0. Scope and release criteria (done)
+## 0. How this file works
 
-- [x] v1 scope, target distros, architecture, compatibility matrix, minimum hardware, session model (full Sway session), must-have list, out-of-scope list, acceptance criteria per feature, and versioning policy are written in `docs/RELEASE_SCOPE.md`.
-- [x] No README feature is described as existing unless it is built (see "Planned Features").
+### 0.1 Task line format
 
-### Reopened items
+```
+- [ ] **FIX-00** `P0` `bug` `v1.1` — Outcome-first title. ✅ testable acceptance. ⛓ DEP-01
+```
 
-- [x] **FIX-00a** (P0) `RELEASE_SCOPE.md` does not match `go.mod`: it says minimum Go is 1.24, but `go.mod` says `1.27.3`. ✅ Pick one version and make `go.mod`, CI, `CONTRIBUTING.md`, and `RELEASE_SCOPE.md` agree. (⛓ FIX-05)
+- The optional 4th tag is the target release; the default is `v1.0`.
+- Details go in indented sub-bullets (`  - ✅ …`, `  - ⛓ …`), never in a new top-level line.
 
----
+### 0.2 Markers
 
-## 1. Project structure and base quality
+| Marker | Meaning                                                             |
+| ------ | ------------------------------------------------------------------- |
+| `[ ]`  | Open                                                                |
+| `[~]`  | Partial or reopened: the line says what is missing (and since when) |
+| `[x]`  | Done and verified: code + tests + docs, `make check` green          |
 
-### Done
-- [x] Shared contracts (`internal/api/contracts`), domain errors, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, pre-commit, basic CI, `.golangci.yml`.
+### 0.3 Priority rubric (decides order, not size)
 
-### Reopened / quick fixes (all P0 unless noted)
+| Level | Rule                                                                                                                                                                                                      |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `P0`  | Do now. Any of: (a) the build, CI or e2e is broken or reports false results; (b) a critical security problem or a fail-open security path; (c) it blocks the core user journey _log in → usable desktop_. |
+| `P1`  | Needed for the target release and gives something a user or tester can see, run or rely on (feature, visible fix, real hardening).                                                                        |
+| `P2`  | Internal quality, polish or nice-to-have; may slip to a later release.                                                                                                                                    |
 
-- [x] **FIX-01** Plain `make` runs `vm-doctor` instead of `all` (because `-include tests/vm/vm.mk` comes before `all`). ✅ Add `.DEFAULT_GOAL := all` and test that `make -n` picks `all`. Also replace `$(GO)fmt` with `GOFMT := gofmt`.
-- [x] **FIX-02** `lib.sh` is in the repo root, but `tests/e2e/run.sh` sources `tests/e2e/lib.sh`. ✅ Move the file to `tests/e2e/lib.sh`; `make vm-test` runs with no source error.
-- [x] **FIX-03** `configs/sway/config` includes `$HOME/.config/i3-next/sway/*`, which nothing installs, and the keybindings call commands that do not exist (`i3-nextctl launcher`, `i3-nextctl session logout`). ✅
-  - Make the include path relative to the config file (or install into `~/.config/i3-next/sway/`), and make `sway --validate` pass on the installed path in e2e.
-  - Until the commands exist, change the missing binds to `exec foot` / `swaymsg exit`, or comment them out.
-- [x] **FIX-04** The version is repeated in many places and does not match (`i3-nextd` = `0.1.1`, others `0.1.0`, `app.go` has a hard-coded `"0.1.0"`, plus `contracts.AppVersion`). ✅ Create an `internal/version` package (Version/Commit/BuildDate from `-ldflags`); delete the `info.go` files; all binaries (including `i3-next-doctor`) give the same `--version` output; e2e `t_version_flags` covers all four binaries.
-- [x] **FIX-05** Check the Go version. ✅ `go.mod` has only `go` (the real minimum) and `toolchain` if needed; CI uses `go-version-file: go.mod`; the chosen version can be installed on both Tier-1 distros (`guest-provision.sh` already checks with HEAD).
-- [x] **FIX-07** `bootstrapDirs` creates directories with `0o755`, but `SECURITY.md` promises minimal permissions. ✅ Create runtime/state/data/config with `0o700`; add a unit test for the mode (using `t.TempDir()` and `XDG_*`).
-- [x] **FIX-08** Removing the lock file after `flock(UN)` has a classic race (a second process can lock the deleted inode). ✅ Do not delete the lock file (or re-check the inode with `stat` after open); test with two processes at once where exactly one wins.
-- [x] **FIX-09** `internal/app/bootstrap`: ✅
-  - Replace the reflection-based `callLifecycle` with typed interfaces (`Starter`, `Stopper`, `HealthChecker`, `Reloader`, `Named`). (The current `param.Implements(ctxType)` check is backwards.)
-  - Remove the aliases `AddService/Add/Use`.
-  - Merge `ErrAlreadyRunning/ErrNotRunning` with `internal/core/errors`; keep `ErrLoggerRequired` in one place.
-- [x] **FIX-10** `App.Run`: ✅
-  - Log and collect `Stop` errors (do not ignore them).
-  - Log "starting" after startup succeeds, and take the version from `internal/version`.
-  - Watch for service failure while running (Health/exit) and go degraded or shut down by policy.
-  - Tests: rollback on start failure, reverse stop order, shutdown timeout, hook failure, running again after Run.
-- [x] **FIX-12** (P0) CI: ✅
-  - Pin actions by SHA; pin `staticcheck` and `golangci-lint` to exact versions (not `latest`).
-  - Add `govulncheck ./...`.
-  - Add `concurrency: cancel-in-progress` and `timeout-minutes` to jobs.
-  - The QML job uses `|| true`, so it is always green; it must really install `qmllint` or fail.
-  - Add a Go version matrix (minimum and current).
-- [x] **FIX-13** The README "Structure" section is the target layout, not the real one. ✅ Title it "Target structure (not yet created)" or show the real tree; also set `[x]` items in section 1 that are only skeletons (package layout, empty config/QML files) back to `[ ]`.
-- [x] **FIX-14** (P1) `SECURITY.md` points to `docs/SECURITY.md`, which does not exist; `scripts/build.sh` is a second build source; `scripts/install.sh` installs only binaries (not config/QML/session). ✅ Make a final decision and align them. (⛓ PKG-01)
-- [x] **FIX-15** `i3-next-doctor` always exits 0, even with `[FAIL]`. ✅ Non-zero exit on FAIL, `--json`, and a new e2e test. (⛓ OBS-04)
-- [x] **FIX-16** (P1) One naming rule: `i3_next` (module/AppName) vs `i3-next` (dirs/binaries). ✅ Write it in `docs/development/naming.md` and add a script that checks it.
+Tie-breaks: (1) order by _tangibility_ — what can someone see or run right after merge? (2) a task that only prepares internals is `P2`, unless a `P0`/`P1` task is blocked on it; then it inherits that priority and gets a `⛓`.
 
-### Rest of section 1
-- [x] **STRUCT-01** (P0) Create packages only when they have real code (no empty folders). ✅ Enforce the import rule (core ⟵ adapters/services ⟵ api) with `depguard` / `go-arch-lint` in `.golangci.yml`.
-- [x] **STRUCT-02** (P1) `CODEOWNERS`, PR/Issue templates, `CHANGELOG.md` (Keep a Changelog).
-- [x] **STRUCT-03** (P1) `go.sum` and a dependency policy: every new dependency needs a reason in the PR and a license check. (⛓ SEC-10)
+### 0.4 Types and ID prefixes
+
+Types: `bug`, `sec`, `feat`, `test`, `infra`, `docs`, `debt`.
+
+Prefixes: `FIX` defects in already-merged code (any area), `STRUCT`, `CORE`, `CFG`, `SWAY`, `API`, `UI`, `SVC`, `DBUS`, `PLG`, `STO`, `SEC`, `OBS`, `SES`, `PKG`, `QA`, `PERF`, `DOC`, `CI`, `FEAT` (features from `docs/new_features.md`). IDs are never renumbered or reused.
+
+### 0.5 Definition of Done
+
+Code written, tests (unit/integration/e2e) pass in CI, docs updated, `make check` and `make vm-test` green.
+
+### 0.6 Editing rules
+
+1. Keep the section order and numbering (full rules: `docs/development/todo-structure.md`).
+2. New task: next free ID in its prefix, in the right area of section 3, sorted `P0 → P2` inside **Open**.
+3. Finishing a task: flip to `[x]`, move it to **Done** of its area, add a line to the progress log (section 6), refresh the status table (section 1).
+4. Reopening: flip to `[~]`, add `(reopened YYYY-MM-DD: reason)`. Never delete IDs.
+5. Section 2 is derived from the rubric: at most 12 ordered items, only open tasks, each referencing a task ID in bold.
+6. Every new feature idea needs: type, acceptance criteria, dependencies, and a security note if it executes commands or reads user files.
+7. Dropping a task: keep the line, flip it to `[x]`, start the title with `DROPPED —` plus the reason, move it to **Done**, and log it. Never delete it.
 
 ---
 
-## 2. Desktop Core and lifecycle
+## 1. Status snapshot
 
-### 2.1 Bootstrap and lifecycle
-- [x] **CORE-01** (P0) Deterministic startup order: services declare `DependsOn()` and are sorted topologically; cycles give an error. ✅ Test order and cycle detection. ⛓ FIX-09
-- [x] **CORE-02** (P0) Service contract in `internal/core/registry`:
-  ```go
-  type Service interface {
-      Name() string
-      Start(ctx context.Context) error
-      Stop(ctx context.Context) error
-      Health(ctx context.Context) contracts.ServiceInfo
-  }
-  ```
-  `Reloader` is optional; services are `required` or `optional` (optional ⟵ degraded). ✅
-- [x] **CORE-03** (P0) Staged rollback: a required service fails ⟵ stop all services already started; an optional one fails ⟵ `degraded` and continue. ✅ Test with a fake service.
-- [x] **CORE-04** (P0) Ordered shutdown with a timeout per service (not only a global one); a stuck service is killed and logged. ✅ Test a hang.
-- [x] **CORE-05** (P0) Signal tests: SIGTERM/SIGINT/SIGHUP (= reload) and clear exit codes (extend the existing e2e `t_daemon_lifecycle`).
-- [x] **CORE-06** (P1) Single instance: clear error message plus the PID of the old process; detect stale locks. ⛓ FIX-08
-- [x] **CORE-07** (P1) Daemon status and the reason for the last failure are kept in state (`status` API) and in `state_dir/last-failure.json`.
+As of 2026-11-07, from a **static review** of the repository (nothing was executed — confirm with `make check`). Current milestone: **M0 — Unbreak**.
 
-### 2.2 Process supervisor (`internal/app/supervisor`)
-- [x] **CORE-10** (P0) Run processes with `exec.CommandContext` and an argument list (no shell); validate the path with `LookPath` and check owner/permissions. ✅
-- [x] **CORE-11** (P0) Capture stdout/stderr into structured logs (line-split, size-capped); record exit code/signal. ✅
-- [x] **CORE-12** (P0) Restart policy: `max_restarts` within a `window`, exponential backoff with jitter; above the limit ⟵ `failed/degraded`, no loop. ✅ Test with a process that always crashes.
-- [x] **CORE-13** (P0) Stopping a child: SIGTERM ⟵ grace period ⟵ SIGKILL on the process group (`Setpgid`); no orphans after the daemon dies (`Pdeathsig`). ✅ e2e test.
-- [x] **CORE-14** (P1) Environment allowlist for children, and redact sensitive variables (`*TOKEN*`, `*SECRET*`, `*PASSWORD*`) in logs.
-
-### 2.3 Event bus and state
-- [x] **CORE-20** (P0) `internal/core/eventbus` with generics: `Subscribe[T](topic) (<-chan T, cancel)`. ✅
-- [x] **CORE-21** (P0) Documented and tested backpressure policy: bounded queue; coalesce state events (only the latest value matters); never silently drop essential events (report an error); isolate handler panics.
-- [x] **CORE-22** (P0) Define the main events in `internal/api/events` with a versioned schema: `SessionStarted`, `SwayConnected/Disconnected`, `WorkspaceChanged`, `OutputChanged`, `ConfigChanged`, `ServiceStateChanged`, `ShutdownRequested`.
-- [x] **CORE-23** (P0) `internal/core/state`: immutable snapshot plus a monotonic version (for snapshot recovery in the API); `-race` test and a benchmark. ⛓ API-09
-- [x] **CORE-24** (P1) Load test (10k events/s, 100 subscribers) and goroutine leak check with `goleak`.
+| Area                   | State          | Evidence                                                                                                                  |
+| ---------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Build                  | ❌ broken      | `eventbus` declares generic methods (illegal in Go) → eventbus, workspace service and their tests do not compile (FIX-17) |
+| Format / lint          | ❌             | gofmt-dirty files, empty branch, `go.sum` not in the reviewed snapshot (FIX-19)                                           |
+| e2e / VM tests         | ⚠️ false-green | script exit status ignores failures; some tests run before they are defined (FIX-18)                                      |
+| Daemon `i3-nextd`      | ⚠️ skeleton    | lifecycle, lock, config fallback work; registers no services, no Sway, no API (CORE-30)                                   |
+| CLI `i3-nextctl`       | ⚠️ stub        | `status` prints a fixed string; `config backup/restore` only print (OBS-05, CFG-10)                                       |
+| Sway adapter           | ⚠️             | framing, models, validated commands OK; client can fail silently, no reconnect (FIX-21, SWAY-04)                          |
+| Session                | ❌             | `i3-next-session` is a stub, yet its `.desktop` entry is installed (FIX-20)                                               |
+| Shell (QML)            | ❌             | placeholder rectangles; Quickshell is never started                                                                       |
+| Services / API / D-Bus | ❌             | not started (the workspace service exists but is unwired)                                                                 |
+| Packaging              | ⚠️             | `make install` exists; path drift, no `.deb` (FIX-27, PKG-10)                                                             |
+| Docs                   | ⚠️             | architecture, security, config reference exist; no user guide or troubleshooting                                          |
 
 ---
 
-## 3. Configuration (`internal/core/config`)
+## 2. Priority queue
 
-> Today only `paths.go` exists, so everything below is open.
+Ordered by the rubric in 0.3: first make the repo honest, then deliver the first thing a user can run (login → desktop with a panel), securing the control socket on the way. Re-derive after every merged task.
 
-- [x] **CFG-01** (P0) Typed Go structs for the four files plus `version`, and a strict parser (`yaml.v3` with `KnownFields(true)`); record the new dependencies. ✅ Valid/invalid fixtures.
-- [x] **CFG-02** (P0) A written schema (JSON Schema or a Go validator) and error messages with key path and line number (`desktop.yaml:12 ui.theme: unknown value "x"`).
-- [x] **CFG-03** (P0) `//go:embed` for `configs/defaults/*` and fill in valid values (`shortcuts.yaml` / `plugins.yaml` must not be just empty lists: add real default shortcuts at least).
-- [x] **CFG-04** (P0) Documented and built layer order: defaults < `/etc/i3-next` < `~/.config/i3-next` < env (`I3NEXT_*`) < flags. ✅ Merge test.
-- [x] **CFG-05** (P0) Install defaults on first run with `O_EXCL` (never overwrite). ✅ Idempotency test.
-- [x] **CFG-06** (P0) Atomic writes: temp file in the same directory ⟵ `fsync` ⟵ `rename` ⟵ `fsync(dir)`; set `0600/0644` permissions. ✅ Crash-injection test."
-- [x] **CFG-07** (P0) Invalid config: the daemon starts with the last valid config (or defaults), state is `degraded` with an actionable error; no restart loop. ✅ `LoadDesktopWithFallback` + `bootstrap.WithConfig` + e2e `t_cfg07_*`.
-- [x] **CFG-08** (P1) Versioned migration (`vN ⟶ vN+1`) with an automatic backup first, and a golden-file test. ✅ `MigrateBytes`/`migrateIfNeeded` registry + backup + golden `testdata/golden/desktop.v1-v2.yaml`.
-- [x] **CFG-09** (P1) Safe reload (SIGHUP + `config.reload` API): compute a diff; report non-reloadable keys clearly.
-- [x] **CFG-10** (P1) `i3-nextctl config validate|show|backup|restore`. ⛓ OBS-05
-- [x] **CFG-11** (P1) `docs/config/` full key reference (generated from the schema) plus examples.
-- [x] **CFG-12** (P1) Optional file watcher (`fsnotify`) with debounce for reload.
+1. **FIX-17** — event bus compiles again (unblocks the workspace service and most tests)
+2. **FIX-19** — `make check` and CI green: gofmt, `go.sum`, dependency bump, `govulncheck`
+3. **FIX-18** — e2e/VM suite fails when a test fails (and runs every test)
+4. **FIX-20** — stop installing the broken session entry
+5. **FIX-21** — Sway client: no silent failures, no dead client after one timeout
+6. **SWAY-04** — reconnect, resubscribe and rebuild the snapshot after Sway restarts
+7. **CORE-30** — wire the daemon: Sway adapter, workspace service, supervised shell
+8. **API-02** — secure control socket (0600, peer credentials) with `hello` and `status.get`
+9. **OBS-05** — real `i3-nextctl status` talking to the daemon
+10. **SES-02** — minimal real session, proven by the VM login test (SES-09)
+11. **SWAY-24** — generated, validated Sway config; the user's config is never overwritten
+12. **UI-10** — first usable panel: clock + workspaces over the real backend (UI-01, UI-03)
 
----
-
-## 4. Sway integration (`internal/adapters/sway`)
-
-### 4.1 IPC client
-- [x] **SWAY-01** (P0) Standalone client: find `SWAYSOCK` (fallback to `swaymsg -t get_socket_path` only if needed), clear error if missing. ✅ Standalone `internal/adapters/sway` client: `SocketPath` prefers `SWAYSOCK` and falls back to `swaymsg -t get_socketpath`; returns clear `ErrSocketNotFound` (wraps `ErrUnavailable`) when missing. Unit tests cover env/trim, fallback success, empty/failure output, and missing socket.
-- [x] **SWAY-02** (P0) i3-ipc protocol: magic `i3-ipc`, header (len, type) in native endianness; framing tested with fuzz (`go test -fuzz`) for partial/huge messages.
-- [x] **SWAY-03** (P0) Commands (`RUN_COMMAND`), queries (`GET_WORKSPACES/OUTPUTS/TREE/INPUTS/VERSION`), and subscribe (window/workspace/output/mode/shutdown/input).
-- [ ] **SWAY-04** (P0) Reconnect with backoff + resubscribe + full snapshot rebuild after connecting; handle Sway `shutdown` events correctly. ✅ e2e: kill/restart Sway.
-- [x] **SWAY-05** (P0) Context/timeout for every request; safe concurrency (one reader goroutine, matching replies by message type).
-- [x] **SWAY-06** (P0) Typed models plus real JSON fixtures from Sway 1.8 and 1.10+ in `internal/adapters/sway/testdata/`. ✅ Parse test that tolerates unknown fields.
-- [x] **SWAY-07** (P1) An `Adapter` interface in `internal/adapters/sway` (services depend only on it) plus a fake for service tests.
-- [ ] **SWAY-08** (P1) Version-based feature detection (a capability table in code and docs).
-- [ ] **SWAY-09** (P0) Integration test with headless Sway in `make vm-test` (using the existing `tests/e2e` setup).
-
-### 4.2 Window and workspace management
-- [x] **SWAY-20** (P0) `workspace` / `window-manager` service: snapshot + events ⟵ event bus. (⛓ CORE-20/22)
-- [x] **SWAY-21** (P0) Operations: focus/move/close/floating/layout/move-to-workspace/output. Inputs (workspace name, app_id) must be **escaped/validated** so command injection into Sway is impossible. ✅ Test with an input like `; exec ...`.
-- [ ] **SWAY-22** (P1) Multi-monitor: workspace↔output, hotplug (connect the existing `sway_monitor_hotplug` test to the service).
-- [ ] **SWAY-23** (P1) Window rules with a schema; generate `window-rules` from config instead of a fixed file.
-- [ ] **SWAY-24** (P0) Generate the Sway config from a template (`text/template`) into `state_dir/generated/`, validate with `sway --validate -c`, and **never** overwrite the user's config without a backup/consent. ✅
-- [ ] **SWAY-25** (P1) Document the default keybindings and how to return to the default config.
+Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails closed, FEAT-01 shell self-heal, SVC-04/SVC-06 audio and battery, FEAT-03/FEAT-04 snapshot save/restore.
 
 ---
 
-## 5. Core ⟷ Shell API (`internal/api/rpc`)
+## 3. Backlog by area
 
-- [ ] **API-01** (P0) Recorded decision (ADR in `docs/architecture/adr/0001-rpc.md`): Unix socket + JSON-RPC 2.0 (line- or length-prefixed).
-- [ ] **API-02** (P0) Socket at `$XDG_RUNTIME_DIR/i3-next/i3-next.sock` with `0600`; directory `0700`; set `umask` before `Listen`; remove a stale socket only if connecting fails. ✅ Permission test.
-- [ ] **API-03** (P0) Check `SO_PEERCRED`: only the session owner's UID is allowed. ✅ Test that another UID is rejected (in the VM with a second user).
-- [ ] **API-04** (P0) `hello {api_version, client}` handshake and a compatible/incompatible reply (`contracts.APIVersion`); show `version_mismatch` in the UI.
-- [ ] **API-05** (P0) Limits: max message size (for example 1 MiB), per-request timeout, max concurrent requests, max connections. ✅ Fuzz/over-limit test.
-- [ ] **API-06** (P0) Error mapping: `internal/core/errors` ⟷ `contracts.ErrorCode` in one table, with a test.
-- [ ] **API-07** (P0) Minimum v1 methods: `status.get`, `service.list/restart`, `config.get/validate/reload`, `workspace.*`, `output.*`, `launcher.search/launch`, `notification.*`, `session.logout/restart/shutdown`.
-- [ ] **API-08** (P0) Event stream: `events.subscribe` (notifications without id) with a sequence number.
-- [ ] **API-09** (P0) Recovery after reconnect: `state.snapshot` with a `version`; the client detects a gap and fetches a new snapshot. ⛓ CORE-23
-- [ ] **API-10** (P1) `docs/api/` docs (generated from code) plus a `socat` example.
-- [ ] **API-11** (P1) Shared contract test: golden JSON files that both Go and QML (mock backend) test against.
-- [ ] **API-12** (P1) Rate limit on sensitive methods (shutdown/launch).
+### 3.1 Structure, build and repo hygiene
+
+**Open**
+
+- [ ] **FIX-19** `P0` `infra` — `make check` and CI are green on a fresh clone. Known blockers: gofmt-dirty files (`internal/adapters/sway/models.go`, `client.go`, `internal/core/config/reload.go`), an empty branch in `Client.Request` (staticcheck), `go.sum` absent from the reviewed snapshot (CI builds with `-mod=readonly`), 2022-era dependencies (`fsnotify v1.5.4`, `x/sys`). ✅ `gofmt -l .` empty; `go mod tidy` leaves no diff; `govulncheck ./...` clean; `make check` passes in CI.
+- [ ] **FIX-28** `P2` `docs` — Docs drift: `docs/kvm.md` documents `tests/vm/vm.sh` (it is `vm.py`); CHANGELOG top entry is `0.2.1` while `internal/version` is `0.2.14` and `.kilo/commands/finalize-task.md` bumps the patch on every task; `RELEASE_SCOPE.md` "Last updated". ✅ version bumps only at release (CHANGELOG `Unreleased` otherwise); one place per fact.
+- [ ] **FIX-29** `P2` `debt` — API-surface bloat: dozens of alias methods and `...any` argument parsing in `supervisor`, `registry`, `state`, `eventbus`, `bootstrap` (the intent of FIX-09 was one name per operation). ✅ one name per operation, typed options/structs; remaining reflection (`serviceShutdownTimeout`, `killService`) replaced by small typed interfaces.
+- [ ] **FIX-32** `P2` `debt` — Defaults are duplicated in `configs/defaults/` and `internal/core/config/defaults/`. ✅ single source (embed from one place, or a test that diffs them).
+
+**Done**
+
+- [x] **FIX-00a** `P0` `docs` — `go.mod`, CI, CONTRIBUTING and RELEASE_SCOPE agree on Go 1.24.0
+- [x] **FIX-01** `P0` `infra` — default goal is `all`
+- [x] **FIX-02** `P0` `bug` — `lib.sh` lives in `tests/e2e/`
+- [x] **FIX-03** `P0` `bug` — Sway config includes are relative; no binds to missing commands
+- [x] **FIX-04** `P0` `infra` — single `internal/version` package, one `--version` format
+- [x] **FIX-05** `P0` `infra` — Go version decision (1.24.0) applied everywhere
+- [x] **FIX-07** `P0` `sec` — runtime/state/data/config directories are `0700`
+- [x] **FIX-08** `P0` `sec` — lock file is not deleted on release (see FIX-31)
+- [x] **FIX-09** `P0` `debt` — typed lifecycle interfaces in bootstrap
+- [x] **FIX-10** `P0` `bug` — `Run` collects stop errors and watches service health
+- [x] **FIX-12** `P0` `infra` — CI: pinned actions/tools, govulncheck, timeouts, concurrency, real qmllint
+- [x] **FIX-13** `P1` `docs` — README "Target structure (not yet created)"
+- [x] **FIX-14** `P1` `docs` — `docs/SECURITY.md` exists; `scripts/build.sh` is a wrapper
+- [x] **FIX-15** `P1` `bug` — `i3-next-doctor` exit codes and `--json`
+- [x] **FIX-16** `P1` `docs` — naming rule documented and checked by `scripts/check-naming.sh`
+- [x] **STRUCT-01** `P0` `infra` — import layering enforced with depguard
+- [x] **STRUCT-02** `P1` `docs` — CODEOWNERS, PR/issue templates, CHANGELOG
+- [x] **STRUCT-03** `P1` `docs` — dependency policy
+
+### 3.2 Core and lifecycle
+
+**Open**
+
+- [ ] **FIX-17** `P0` `bug` — Event bus does not compile: Go has no methods with type parameters, yet `eventbus` declares `func (b *Bus) Subscribe[T any]`, `Publish[T any]`, `SubscribeFunc[T any]`, … and the workspace service and tests call them. Redesign as package-level generics (`eventbus.Subscribe[T](b, topic)`, `eventbus.Publish(b, topic, v, opts...)`); also fix `cancel` closing `closedCh` twice (panic when `Bus.Close` and a deferred cancel both run) and the possible send-on-closed-channel between the pump goroutine and `close(out)`. ✅ `go build ./... && go test -race ./...` green; goleak clean; CORE-24 load test passes.
+- [ ] **CORE-30** `P0` `feat` — Wire the daemon: `i3-nextd` builds a registry — Sway adapter (with reconnect) → workspace service → optional supervised `quickshell` and `swaybg` — honouring `services.yaml` `enabled` flags, `DependsOn` and required/optional; logs `ServiceStateChanged`. ✅ e2e with headless Sway: `swaymsg workspace number 2` ⇒ `WorkspaceChanged` in the log; `kill -9` of the shell ⇒ restart with backoff, `degraded` after the limit; disabling a service in `services.yaml` is honoured. ⛓ FIX-17, FIX-21, SWAY-04
+- [ ] **FIX-23** `P1` `bug` — Supervisor correctness: `Pdeathsig` is tied to the OS _thread_ that forked the child (needs `runtime.LockOSThread` in the spawning goroutine) so children can be killed spuriously; `p.lastErr` is written without the mutex (data race); `buildEnv` has `|| true` that makes the allowlist a no-op for explicit env; command validation only checks the exec bit (not owner or world-writable); there are no supervisor tests. ✅ tests: crashing child respects the restart limit; process-group kill leaves no orphans; redaction; `-race` clean.
+- [ ] **FIX-24** `P1` `bug` — Bootstrap status: a persisted `last-failure.json` is reloaded on every start and reported forever (never cleared after a healthy start); health polling runs every 10 ms; an informational migration note marks the config load as degraded. ✅ healthy start clears the failure; poll interval 2–5 s; `Degraded` only for real problems.
+- [~] **CORE-05** `P1` `test` — Signals: SIGTERM/SIGINT covered by e2e; SIGHUP is not handled (FIX-22) and exit codes are not specified (reopened 2026-11-07). ✅ table of signals → behaviour → exit code, with tests.
+- [~] **CORE-10** `P1` `sec` — Supervisor launches via `exec.CommandContext` with argv and `LookPath`; owner/permission check and tests pending (FIX-23).
+- [~] **CORE-11** `P1` `feat` — stdout/stderr capture and exit code/signal recorded; tests pending (FIX-23).
+- [~] **CORE-12** `P1` `feat` — restart policy with backoff and window; tests with an always-crashing child pending (FIX-23).
+- [~] **CORE-13** `P1` `bug` — SIGTERM → grace → SIGKILL on the process group; `Pdeathsig` caveat and the e2e orphan test pending (FIX-23).
+- [~] **CORE-14** `P1` `sec` — env allowlist and redaction implemented; `|| true` bypass and tests pending (FIX-23).
+- [~] **CORE-20** `P1` `feat` — generic `Subscribe[T]` bus: blocked by FIX-17.
+- [~] **CORE-21** `P1` `feat` — backpressure/coalescing policy: implemented, untestable until FIX-17.
+- [~] **CORE-24** `P1` `test` — load test and goleak exist; cannot run until FIX-17.
+
+**Done**
+
+- [x] **CORE-01** `P0` `feat` — topological startup order, cycle detection
+- [x] **CORE-02** `P0` `feat` — `registry.Service` contract, required/optional
+- [x] **CORE-03** `P0` `feat` — rollback on required failure, degrade on optional
+- [x] **CORE-04** `P0` `feat` — per-service shutdown timeout, stuck service killed
+- [x] **CORE-06** `P1` `feat` — single instance with PID in the error
+- [x] **CORE-07** `P1` `feat` — last failure kept in state and `last-failure.json`
+- [x] **CORE-22** `P0` `feat` — versioned event schemas in `internal/api/events`
+- [x] **CORE-23** `P0` `feat` — immutable versioned snapshots in `internal/core/state`
+
+### 3.3 Configuration
+
+**Open**
+
+- [ ] **FIX-22** `P1` `bug` — Config is mostly decorative: `i3-nextd` does not handle SIGHUP (default action terminates the process without graceful shutdown) and nothing triggers reload (`Reloader`, `DiffDesktop`, the watcher are unused); `logging.level/format` are ignored (`logging.New(debug)`); `paths.*` and `ui.*` are unused. ✅ SIGHUP ⇒ validated reload + log line; `logging.level: debug` changes output; non-reloadable keys reported; e2e. ⛓ CFG-09
+- [~] **CFG-05** `P1` `bug` — `InstallDefaults` exists with `O_EXCL`, but nothing calls it, so first run installs nothing (the doctor even tells users to run `i3-nextd` to get defaults) (reopened 2026-11-07). ✅ first run creates missing files only; idempotent.
+- [~] **CFG-02** `P1` `feat` — only unknown-key and syntax errors are reported; no value validation (`session.compositor: foo`, bad `logging.level` pass) (reopened 2026-11-07). ✅ validator with `file:line key: unknown value "x"`.
+- [~] **CFG-09** `P1` `feat` — diff and non-reloadable keys implemented; no trigger (SIGHUP, `config.reload` API) (reopened 2026-11-07).
+- [~] **CFG-10** `P1` `feat` — `config validate|show` work; `backup` and `restore` only print a message (reopened 2026-11-07). ✅ real atomic backup/restore with tests. ⛓ OBS-05
+- [~] **CFG-12** `P2` `feat` — watcher with debounce exists; not wired.
+- [~] **CFG-06** `P2` `test` — `AtomicWrite` implemented; the promised crash-injection test is missing (reopened 2026-11-07).
+
+**Done**
+
+- [x] **CFG-01** `P0` `feat` — typed structs and strict parser
+- [x] **CFG-03** `P0` `feat` — embedded defaults
+- [x] **CFG-04** `P0` `feat` — layer order defaults < system < user < env < flags
+- [x] **CFG-07** `P0` `feat` — invalid config degrades to last-valid/defaults, no restart loop
+- [x] **CFG-08** `P1` `feat` — versioned migration with backup and golden test
+- [x] **CFG-11** `P1` `docs` — `docs/config/README.md` key reference
+
+### 3.4 Sway integration
+
+**Open**
+
+- [ ] **FIX-21** `P0` `bug` — Sway client correctness: connection loss returns an empty `Message` with a nil error (`failAll` sentinel) so callers see success; a request deadline is applied to the _shared_ connection, so one expired request kills the reader goroutine and the client forever; concurrent requests of the same type overwrite each other's reply slot (replies should be matched FIFO); `RunCommand` ignores `[{"success":false}]` replies; subscription channels are never closed when the connection drops. ✅ fake-server tests: dropped connection ⇒ error; timeout then next request works; two concurrent `GET_*` both answered; failing command ⇒ error; event channel closes on disconnect.
+- [ ] **SWAY-04** `P0` `feat` — Reconnect with backoff, resubscribe and rebuild the full snapshot; react to the Sway `shutdown` event. ✅ e2e: kill and restart headless Sway. ⛓ FIX-21
+- [ ] **SWAY-24** `P0` `feat` — Generate the Sway config from a template into `state_dir/generated/`, validate with `sway --validate -c`, and never overwrite the user's config without backup and consent. ✅ validation in e2e; user config byte-identical afterwards.
+- [~] **SWAY-20** `P1` `feat` — workspace service with snapshot + events is implemented; unwired and blocked by FIX-17 (reopened 2026-11-07). ⛓ CORE-30
+- [~] **SWAY-05** `P1` `bug` — context/timeouts exist, but see FIX-21 for the concurrency and deadline defects (reopened 2026-11-07).
+- [ ] **SWAY-22** `P1` `feat` — Multi-monitor: workspace↔output mapping and hotplug in the service (connect the existing `sway_monitor_hotplug` test).
+- [ ] **SWAY-09** `P1` `test` — Integration test against headless Sway in `make vm-test`.
+- [ ] **SWAY-08** `P1` `feat` — Version-based feature detection (capability table in code and docs).
+- [ ] **SWAY-23** `P1` `feat` — Window rules from a schema instead of a fixed file.
+- [ ] **SWAY-25** `P2` `docs` — Document default keybindings and how to return to plain Sway.
+- [ ] **FIX-30** `P2` `bug` — `Input` model uses `xkb_current_layout_index` as a string; sway reports `xkb_active_layout_index` (int) and `xkb_active_layout_name`. ✅ fixture from real `get_inputs` parses.
+
+**Done**
+
+- [x] **SWAY-01** `P0` `feat` — socket discovery with clear error
+- [x] **SWAY-02** `P0` `feat` — i3-ipc framing with fuzz test
+- [x] **SWAY-03** `P0` `feat` — commands, queries and subscribe
+- [x] **SWAY-06** `P0` `test` — typed models with 1.8 / 1.10 fixtures
+- [x] **SWAY-07** `P1` `feat` — `Adapter` interface and fake
+- [x] **SWAY-21** `P0` `sec` — workspace/app_id/output/layout inputs validated (no command injection)
+
+### 3.5 Core ⟷ Shell API
+
+**Open**
+
+- [ ] **API-02** `P0` `sec` — Socket at `$XDG_RUNTIME_DIR/i3-next/i3-next.sock` with `0600`, directory `0700`, `umask` set before `Listen`, stale socket removed only if connecting fails. ✅ permission test.
+- [ ] **API-03** `P0` `sec` — Check `SO_PEERCRED`: only the session owner's UID is accepted. ✅ another UID rejected (second user in the VM).
+- [ ] **API-01** `P0` `docs` — ADR `docs/architecture/adr/0001-rpc.md`: Unix socket + JSON-RPC 2.0 framing.
+- [ ] **API-04** `P0` `feat` — `hello {api_version, client}` handshake; incompatible versions give `version_mismatch` (shown in the UI).
+- [ ] **API-07** `P0` `feat` — Methods, delivered incrementally: first `status.get`, `service.list`; then `config.*`, `workspace.*`, `output.*`, `launcher.*`, `notification.*`, `session.*`. ⛓ API-02
+- [ ] **API-05** `P1` `sec` — Limits: message size, request timeout, concurrent requests, connections. ✅ over-limit/fuzz test.
+- [ ] **API-06** `P1` `feat` — One table mapping `internal/core/errors` ⟷ `contracts.ErrorCode`, with a test.
+- [ ] **API-08** `P1` `feat` — `events.subscribe` stream with sequence numbers.
+- [ ] **API-09** `P1` `feat` — `state.snapshot` with `version`; clients detect gaps and refetch. ⛓ CORE-23
+- [ ] **API-10** `P1` `docs` — `docs/api/` generated from code plus a `socat` example.
+- [ ] **API-11** `P2` `test` — Golden JSON contract files shared by Go and the QML mock backend.
+- [ ] **API-12** `P2` `sec` — Rate limit sensitive methods (shutdown/launch).
+
+### 3.6 Shell UI (Quickshell/QML)
+
+**Open**
+
+- [ ] **UI-01** `P0` `feat` — Real `Backend.qml`: socket connect, handshake, reconnect with backoff, states `disconnected/connecting/connected/incompatible`. ⛓ API-04
+- [ ] **UI-03** `P0` `feat` — Real startup flow `Main→Shell→Session` and a working `qmldir`; shell is started by the daemon/session (not by hand). ✅ `quickshell -p ui/quickshell` starts without errors in the VM.
+- [ ] **UI-02** `P0` `feat` — `EventBridge.qml` fills models from events without blocking the UI thread.
+- [ ] **UI-10** `P0` `feat` — Panel: clock, workspaces, network, audio, battery (hidden without a battery); first slice is clock + workspaces. ⛓ UI-01, UI-02
+- [ ] **UI-11** `P0` `feat` — Launcher: XDG desktop entries (`NoDisplay/Hidden/OnlyShowIn`), fuzzy search, safe launch (no shell, correct `%u %f` field codes). ⛓ SEC-03
+- [ ] **UI-12** `P1` `feat` — Session menu: logout/restart/shutdown with confirmation. ⛓ SES-05
+- [ ] **UI-04** `P1` `feat` — Panel per monitor with hotplug. ✅ e2e with `create_output` / `unplug`.
+- [ ] **UI-05** `P1` `bug` — One failing component must not take the shell down (Loader error handling); crashed shell is restarted by the supervisor. ⛓ CORE-12
+- [ ] **UI-09** `P1` `infra` — `qmllint` clean in CI plus a VM smoke test.
+- [ ] **UI-13** `P1` `feat` — Notification popup and Notification Center. ⛓ SVC-03
+- [ ] **UI-14** `P1` `feat` — Control Center (audio, brightness, network, Bluetooth if present).
+- [ ] **UI-17** `P1` `feat` — Empty/loading/error/disconnected state for every view.
+- [ ] **UI-15** `P2` `feat` — OSD (volume/brightness/workspace).
+- [ ] **UI-16** `P2` `feat` — Task/window list.
+- [ ] **UI-06** `P2` `feat` — Theme tokens and live change from `Settings.qml`.
+- [ ] **UI-07** `P2` `infra` — `I3NEXT_UI_DEBUG=1` and error reporting to the daemon.
+- [ ] **UI-08** `P2` `feat` — Scales/resolutions and accessibility (focus, keyboard, contrast ≥ 4.5:1).
+- [ ] **UI-18** `P2` `feat` — Appearance/theme settings.
+
+### 3.7 System services
+
+**Open**
+
+- [ ] **SVC-07** `P0` `sec` — Lock screen with `swaylock` (trusted tool); fails closed: if the locker dies the session stays locked (`ext-session-lock`). No lock or logout UI ships without this. ✅ test by killing swaylock.
+- [ ] **SVC-00** `P1` `infra` — Service template: `enabled` config, missing optional dependency ⇒ `degraded` with a reason, timeouts, `ServiceStateChanged`, tests with a fake adapter.
+- [ ] **SVC-02** `P1` `feat` — Wallpaper: `swaybg` under the supervisor, multi-monitor.
+- [ ] **SVC-04** `P1` `feat` — Audio: PipeWire/WirePlumber (`wpctl` with argv): volume, mute, default device, change events.
+- [ ] **SVC-06** `P1` `feat` — Power: UPower battery/AC plus logind suspend/reboot/poweroff via polkit.
+- [ ] **SVC-03** `P1` `feat` — Notifications: `org.freedesktop.Notifications` on the session bus (clear error if the name is taken), actions/urgency/timeout, bounded count and size. ⛓ DBUS-01
+- [ ] **SVC-09** `P1` `feat` — Screenshot: `grim`/`slurp`, saved to `XDG_PICTURES_DIR`, safe names.
+- [ ] **SVC-13** `P1` `feat` — Brightness: `brightnessctl` / logind.
+- [ ] **SVC-05** `P1` `feat` — Network: NetworkManager read-only status; absent NM ⇒ `degraded`.
+- [ ] **SVC-11** `P1` `feat` — Display: resolution/scale validated against `get_outputs`, automatic revert after N seconds ("Keep changes?").
+- [ ] **SVC-08** `P1` `feat` — Idle: `swayidle` policy from config (lock/DPMS/suspend) and inhibit.
+- [ ] **SVC-01** `P1` `feat` — Session manager service. ⛓ SES-02
+- [ ] **SVC-10** `P2` `feat` — Clipboard via `wl-clipboard` (no persistent history).
+- [ ] **SVC-12** `P2` `feat` — Media (MPRIS).
+- [ ] **SVC-90** `P2` `feat` `v1.x` — Deferred: full Bluetooth, file search/command palette, clipboard history, layout manager, color picker, system monitor, workspace overview, power profiles.
+
+### 3.8 D-Bus and system integration
+
+**Open**
+
+- [ ] **DBUS-01** `P1` `feat` — `godbus/dbus/v5` wrapper with reconnect/timeouts, session vs system split, table in `docs/architecture/dbus.md`.
+- [ ] **DBUS-03** `P1` `sec` — Validate D-Bus inputs (size/type/UTF-8).
+- [ ] **DBUS-04** `P1` `sec` — polkit/logind for power; least privilege, no `sudo`.
+- [ ] **DBUS-02** `P1` `test` — Fake bus or `dbus-run-session` in e2e.
+- [ ] **DBUS-06** `P1` `test` — Run in an incomplete session (no UPower/NM).
+- [ ] **DBUS-05** `P2` `infra` — D-Bus activation service file if needed. ⛓ PKG-12
+
+### 3.9 Plugin system
+
+**Open**
+
+- [ ] **PLG-00** `P1` `sec` — Decide and record (ADR + RELEASE_SCOPE): external plugins disabled in v1, built-ins only. ✅ no third-party loading code in the v1 build (or behind a `plugins` build tag).
+- [ ] **PLG-03** `P1` `feat` — Unknown plugin in `plugins.yaml` is rejected with a clear message.
+- [ ] **PLG-01** `P2` `sec` `v1.x` — Manifest, permissions, signing, limits and sandbox if plugins are ever enabled.
+- [ ] **PLG-02** `P2` `feat` `v1.x` — SDK, sample plugin, tests for malicious/broken plugins.
+
+### 3.10 Storage
+
+**Open**
+
+- [ ] **STO-00** `P1` `docs` — Decide what must persist (suggestion: small atomic JSON state, no SQLite in v1); if SQLite is not needed, remove it from README/architecture.
+- [ ] **STO-04** `P1` `feat` — `i3-nextctl backup|restore` for config + state. ⛓ CFG-10
+- [ ] **STO-01** `P2` `feat` — If needed: pure-Go SQLite (WAL, `0600`, migrations, repository interface).
+- [ ] **STO-02** `P2` `bug` — Corrupt DB or failed migration: backup, quarantine, fresh start with a warning.
+- [ ] **STO-03** `P2` `feat` — Retention policy; no sensitive data stored.
+
+### 3.11 Security and privacy
+
+**Open**
+
+- [ ] **SEC-03** `P0` `sec` — Path traversal and symlinks: `os.Root` / `openat2(RESOLVE_BENEATH)` or `EvalSymlinks` + owner check for config, assets, desktop entries, snapshots, imported configs. Must land before UI-11, FEAT-04, FEAT-20.
+- [ ] **SEC-07** `P0` `sec` — Lock fails closed (the requirement behind SVC-07; verified by test and QA). ⛓ SVC-07
+- [ ] **SEC-05** `P1` `sec` — Central input validation for IPC/D-Bus/config; fuzz the parsers.
+- [ ] **SEC-06** `P1` `test` — No secrets or personal paths in logs (redaction helper + test).
+- [ ] **SEC-02** `P1` `test` — Automatic permission tests for all files, sockets and locks. ⛓ API-02
+- [~] **SEC-04** `P1` `infra` — `gosec` and `govulncheck` are on; clean up pointless `//nolint` and keep findings at zero.
+- [ ] **SEC-09** `P1` `infra` — Supply chain: `go mod verify`, SBOM, release signing, reproducible builds.
+- [ ] **SEC-10** `P1` `docs` — `THIRD_PARTY_LICENSES.md` via `go-licenses` and a compatibility check.
+- [ ] **SEC-11** `P1` `docs` — Telemetry policy: none (README / `PRIVACY.md`).
+- [ ] **SEC-12** `P1` `docs` — Working vulnerability-disclosure channel in `SECURITY.md` (currently vague).
+- [ ] **SEC-08** `P2` `sec` — Harden the systemd user unit.
+- [ ] **FIX-31** `P2` `sec` — `acquireLock` removes the lock file when the recorded PID is dead; the kernel already drops `flock` on death, so this only reintroduces the FIX-08 race. ✅ remove the stale-removal path; two-process test still has exactly one winner.
+- [ ] **SEC-13** `P2` `docs` — Mark controls in `docs/SECURITY.md` that are not implemented yet (socket peer checks, plugin handling) as _planned_.
+
+**Done**
+
+- [x] **SEC-01** `P0` `docs` — threat model in `docs/SECURITY.md`
+
+### 3.12 Observability and CLI
+
+**Open**
+
+- [ ] **OBS-05** `P0` `feat` — `i3-nextctl` becomes a real API client: `status`, `services`, `config validate|show|backup|restore`, `stop`, `restart`, `log-level`; `--json`; exit codes 0/1/2; remove the hard-coded `status` string. ✅ e2e: daemon running ⇒ `status` prints `running` and the service list; daemon down ⇒ exit 1 with a hint. ⛓ API-02, API-07
+- [ ] **OBS-01** `P1` `feat` — Logger with `component`, `version`, `commit`, `session_id`; journald in a session, `state_dir/logs/` in dev; size cap.
+- [ ] **OBS-02** `P1` `feat` — Log level from config and at runtime (`i3-nextctl log-level`). ⛓ FIX-22
+- [ ] **FIX-26** `P1` `bug` — Doctor: all five directory checks share the id `dir-i3-next`; no minimum Sway/Qt version check (needs SWAY-08). ✅ unique ids (`dir-config`, `dir-state`, …) asserted by an e2e test.
+- [ ] **OBS-06** `P1` `feat` — `i3-nextctl diagnostics bundle` with paths, user name and IPs redacted.
+- [ ] **OBS-03** `P2` `feat` — Actionable errors (`hint=` key).
+- [ ] **OBS-07** `P2` `feat` — Internal counters/gauges in `status` (no network export).
+
+**Done**
+
+- [x] **OBS-04** `P0` `feat` — doctor checks with `{id,status,detail,remedy}`, `--json`, exit codes
+
+### 3.13 Session and login
+
+**Open**
+
+- [ ] **SES-02** `P0` `feat` — `i3-next-session` is a real session: set environment (`XDG_CURRENT_DESKTOP=i3-next:sway`, `XDG_SESSION_TYPE=wayland`, …), `dbus-update-activation-environment --systemd`, start Sway with the generated config (SWAY-24) as a supervised child, then `i3-nextd`; logs to `state_dir/logs/session-*.log`. ⛓ SWAY-24, CORE-30
+- [ ] **SES-09** `P0` `test` — `make vm-gui` brings up a full session with no manual steps and saves a screenshot. ⛓ SES-02
+- [ ] **SES-04** `P0` `bug` — Startup failure shows a message, logs, falls back to plain Sway/foot; recovery documented. ✅ test with a broken daemon.
+- [ ] **SES-05** `P0` `feat` — Clean logout: stop services in reverse order, `swaymsg exit`, remove socket and lock.
+- [ ] **SES-03** `P1` `bug` — Prevent duplicate session starts.
+- [ ] **SES-06** `P1` `feat` — Restart the shell without logging out (`i3-nextctl shell restart`).
+- [ ] **SES-07** `P1` `feat` — Suspend/resume and lock-before-sleep (logind inhibitor).
+- [ ] **SES-08** `P2` `docs` — Document dev mode (nested Sway) and real mode.
+
+**Done**
+
+- [x] **SES-01** `P0` `infra` — `packaging/wayland-sessions/i3-next.desktop` (see FIX-20 for when it may be installed)
+
+### 3.14 Packaging and install
+
+**Open**
+
+- [ ] **FIX-20** `P0` `bug` — The stub session is installed: `make install` copies `i3-next.desktop` (`Exec=i3-next-session`) while the binary prints two lines and exits, so choosing it in the display manager bounces the user to the login screen. ✅ the session entry is installed only by `make install-session` (not by `make install`) until SES-09 passes; documented.
+- [ ] **FIX-27** `P1` `bug` — Install paths drift: the wallpaper goes to absolute `$(WALLPAPER_DIR)` regardless of `PREFIX`; `configs/sway/config` hard-codes `/usr/share/i3-next/wallpapers/…`; `uninstall.sh` leaves the wallpaper; `share/i3-next/sway/` is read by nothing; `assets/wallpapers/*.png` could not be verified in the reviewed snapshot. ✅ `make install DESTDIR=$(mktemp -d)` file list checked in CI; uninstall leaves nothing behind.
+- [~] **PKG-01** `P1` `infra` — `make build` is the only build source and `make install` exists; DESTDIR/PREFIX consistency pending (FIX-27).
+- [ ] **PKG-10** `P1` `feat` — `.deb` for Ubuntu 24.04 and Debian 13 with `Depends`/`Recommends`, lintian-clean. ✅ installs on a clean VM of both.
+- [ ] **PKG-11** `P1` `sec` — postinst/prerm never touch user config; upgrade keeps config; purge only with consent.
+- [ ] **PKG-12** `P1` `infra` — systemd user units and D-Bus/polkit files.
+- [ ] **PKG-14** `P1` `test` — Automatic install/upgrade/uninstall test on a VM. ⛓ QA-05
+- [ ] **PKG-20** `P1` `infra` — `install.sh` with `--prefix`, `--dry-run`, an install manifest, and only touching files it owns; `uninstall.sh` uses the manifest.
+- [ ] **PKG-21** `P1` `sec` — No script overwrites a user file without a backup.
+- [ ] **PKG-03** `P2` `infra` — Debug/release builds; `CGO_ENABLED=0` for release.
+- [ ] **PKG-04** `P2` `infra` — SBOM, checksums, signing.
+- [ ] **PKG-15** `P2` `docs` — Decide: APT repository vs release assets vs offline.
+- [ ] **PKG-13** `P2` `infra` `v1.x` — PKGBUILD (Arch, best effort).
+
+**Done**
+
+- [x] **PKG-02** `P0` `infra` — shared ldflags from `internal/version`
+
+### 3.15 Testing and QA
+
+**Open**
+
+- [ ] **FIX-18** `P0` `test` — The e2e harness lies: `summary` is called before the `t_cfg07_*` functions are defined (so `run_test` runs missing functions), and the script's exit status is that of its last statement (a function definition ⇒ 0) so failures pass `make vm-test`; `t_version_flags` still expects `0.1`. ✅ tests defined before main; `summary` is the last statement; expected version derived from `internal/version`; a deliberately failing test proves a non-zero exit.
+- [ ] **FIX-25** `P1` `sec` — `tests/vm/vm.py`: the Debian image SHA512 check is commented out (the checksum is fetched and then ignored), so a tampered or truncated base image is used silently; `ensure_running()` calls `cmd_start()` without its argument (TypeError whenever the VM is stopped). ✅ mismatch aborts and deletes the download; `make vm-test` restarts a stopped VM.
+- [ ] **QA-05** `P1` `test` — e2e for: daemon+Sway connect/reconnect, real `status`, socket permissions, broken config, full login (VM GUI), logout, crash of daemon/shell/lock, multi-monitor/scale, missing optional deps, upgrade/uninstall, `.deb` install.
+- [ ] **QA-01** `P1` `test` — Unit tests for every new package; ≥ 80% line coverage on core/config/api/sway critical paths.
+- [ ] **QA-02** `P1` `test` — `go test -race -count=1 ./...` with `goleak` is part of every merge.
+- [ ] **QA-03** `P1` `test` — Fuzz: JSON-RPC, config parser, desktop-entry parser, snapshot and sway-config parsers.
+- [ ] **QA-06** `P1` `infra` — e2e in CI (runner with `/dev/kvm`, or a headless subset) and artifact upload.
+- [ ] **QA-08** `P1` `test` — VM matrix: Debian 13 and Ubuntu 24.04.
+- [ ] **QA-10** `P1` `docs` — `docs/development/qa-checklist.md` (input devices, multi-monitor, sleep/resume, network/audio changes, GTK/Qt/Electron apps, notification floods, recovery).
+- [ ] **QA-11** `P1` `test` — A full day-to-day cycle on real hardware, recorded in `docs/release/rc-report.md`.
+- [ ] **QA-04** `P2` `test` — Flaky-test hunt (`-count=20` nightly).
+- [ ] **QA-07** `P2` `test` — ≥ 8 h soak measuring RSS/FD/goroutines.
+
+### 3.16 Performance and reliability
+
+**Open**
+
+- [ ] **PERF-03** `P1` `bug` — The workspace service re-fetches workspaces, outputs and the whole tree on every Sway event (including title changes). ✅ debounce/throttle without losing essential events; benchmark.
+- [ ] **PERF-01** `P1` `docs` — Budget in `docs/release/performance.md`: login→desktop ≤ 5 s, idle daemon ≤ 50 MiB, shell ≤ 250 MiB, idle CPU < 2%.
+- [ ] **PERF-02** `P2` `infra` — Per-component startup timings in the log.
+- [ ] **PERF-04** `P2` `feat` — Memory limits for queues and caches.
+- [ ] **PERF-05** `P2` `test` — Disk full, EACCES, hung process, full socket.
+- [ ] **PERF-06** `P2` `test` — Benchmarks for bus/state/IPC parser with a CI baseline.
+
+### 3.17 Documentation
+
+**Open**
+
+- [ ] **DOC-02** `P1` `docs` — `docs/user-guide/`: install, choosing the session, first run, shortcuts, config.
+- [ ] **DOC-03** `P1` `docs` — `docs/troubleshooting.md` and `docs/recovery.md` (broken config, daemon will not start, black UI, back to plain Sway).
+- [~] **DOC-01** `P1` `docs` — README: install commands per distro and dependency list matching `guest-provision.py`; real status wording kept honest.
+- [ ] **DOC-10** `P1` `docs` — Update `docs/RELEASE_SCOPE.md` and README for the FEAT epics (what ships in v1.0, v1.1, v1.2) and add FEAT IDs to each entry of `docs/new_features.md` for traceability.
+- [ ] **DOC-04** `P1` `docs` — `docs/api/` and `docs/config/` generated from code. ⛓ API-10
+- [ ] **DOC-05** `P1` `docs` — Backup, restore, upgrade, uninstall.
+- [ ] **DOC-06** `P2` `docs` — ADRs for RPC, plugins, storage, session.
+- [ ] **DOC-07** `P2` `docs` — `OVERVIEW.md` with a real diagram.
+- [ ] **DOC-08** `P2` `docs` — Real screenshots (`vm.py screenshot`) and Known Issues.
+- [ ] **DOC-09** `P2` `docs` `v1.x` — Plugin guide, only if plugins are enabled.
+
+**Done**
+
+- [x] **DOC-11** `P1` `docs` — TODO.md structure rules documented for humans and AI agents in `docs/development/todo-structure.md`
+
+### 3.18 CI/CD and release engineering
+
+**Open**
+
+- [ ] **CI-04** `P1` `infra` — Release workflow on tag `vX.Y.Z`: build, test, `.deb`, checksums, SBOM, signing, GitHub Release with changelog.
+- [ ] **CI-02** `P1` `infra` — Build on Ubuntu 24.04 and Debian 13 containers; `.deb` as an artifact.
+- [ ] **CI-07** `P1` `infra` — Release candidates (`v1.0.0-rc.N`) and a documented rollback.
+- [ ] **CI-03** `P2` `infra` — e2e/VM job (self-hosted or nightly). ⛓ QA-06
+- [ ] **CI-05** `P2` `infra` — Dependabot/Renovate for Go modules and Actions.
+- [ ] **CI-06** `P2` `infra` — Conventional Commits check or generated changelog.
+- [ ] **CI-08** `P2` `infra` — Branch protection (PR required, CI green, one review).
+
+**Done**
+
+- [x] **CI-01** `P0` `infra` — CI with pinned actions, govulncheck, shellcheck, qmllint (see FIX-19 for the red state)
+
+### 3.19 Feature epics from `docs/new_features.md`
+
+Design notes that apply to all epics: nothing here may execute a command that came from a file the daemon did not write itself without validation (see SEC-03/SEC-05); anything that changes outputs must be revertible (SVC-11); every epic gets its own security note in its acceptance criteria.
+
+**Open**
+
+_Epic A — "Seamless" monitoring and self-healing (new_features #3)_
+
+- [ ] **FEAT-01** `P1` `feat` — Shell self-heal: `quickshell` runs under the supervisor; a crash restarts it with backoff and notifies the user; after M crashes in a window it stays down, state is `degraded`, the user is told, no loop. ✅ e2e: `kill -9` the shell ⇒ back within N s; repeated kills ⇒ degraded + notification. ⛓ CORE-30, UI-03
+- [ ] **FEAT-02** `P1` `feat` — Sway watchdog: liveness probe (`GET_VERSION` with timeout, 3 misses), `shutdown` event and process exit; policy `on_sway_failure: restart|logout|ignore` (default restart up to a limit, then logout with a message). Documented limit: restarting the compositor ends every Wayland client; recovery of windows is FEAT-05. ✅ e2e: `kill -STOP` Sway ⇒ detected ≤ 15 s and restarted. ⛓ SWAY-04, SES-02, FIX-21
+
+_Epic B — Workspace snapshot save/restore (new_features #1)_
+
+- [ ] **FEAT-03** `P1` `feat` `v1.1` — Snapshot capture: `internal/services/snapshot` builds a versioned snapshot (outputs with make/model/serial, mode, scale, position; workspaces with output and layout; windows with `app_id` or XWayland class, workspace, output, floating, rect, fullscreen, marks) from `GET_TREE/OUTPUTS/WORKSPACES`; stored under `state_dir/snapshots/` with `0600`, atomic write, rotation; no command lines or environment stored. CLI: `i3-nextctl snapshot save|list|show|rm`. ✅ golden tests with 1.8/1.10 fixtures; fuzz the reader. ⛓ SWAY-20, OBS-05
+- [ ] **FEAT-04** `P1` `feat` `v1.1` — Restore: `snapshot restore [name] [--dry-run]`; a pure, unit-testable plan builder (workspace→output mapping with fallback when an output is missing; relaunch missing apps through the desktop entry for their `app_id`, never raw command lines or a shell; wait for the window with a timeout; then `move`/`floating`/`layout`); running windows are only moved; idempotent; progress events. Security: the snapshot file is untrusted input — every field is whitelisted and size-limited. Documented limit: application-internal state is not restored. ✅ e2e: two `foot` windows on workspaces 1 and 3, save, kill, restore ⇒ same placement; a fixture with `app_id: x"; exec …` is rejected. ⛓ FEAT-03, UI-11, SEC-03
+- [ ] **FEAT-05** `P1` `feat` `v1.1` — Auto-snapshot and recovery: debounced snapshots on window/workspace events plus a periodic one, a rotating `last-good`; after a crash or an unclean start, `snapshot.auto_restore: ask|always|never` (default `ask`). ⛓ FEAT-04, FEAT-02
+- [ ] **FEAT-06** `P2` `feat` `v1.1` — UI: "Restore previous layout" in the Control Center/session menu and a notification after recovery. ⛓ UI-14, FEAT-05
+
+_Epic C — Import from the Sway/i3 ecosystem (new_features #4)_
+
+- [ ] **FEAT-20** `P1` `feat` `v1.1` — `i3-nextctl import-sway`: parser for the common subset of Sway/i3 config (`set`/`$var`, `include` with depth/size limits and path validation, `bindsym`/`bindcode` with flags, `exec`/`exec_always`, `output`, `input`, `workspace`, `assign`, `for_window`, `mode` blocks). Default is a dry-run report (mapped / unsupported / needs attention); `--apply` writes only into i3_next's own config with a backup; the user's Sway config is never edited and nothing from it is executed. ✅ golden tests on the i3 default, the Sway default and two real community configs; fuzz. ⛓ SEC-03
+- [ ] **FEAT-21** `P1` `feat` `v1.1` — Mapping: `bindsym` → `shortcuts.yaml` (known keys such as `XF86Audio*` map to services; `exec` stays a command), enable the matching services in `services.yaml` when `wpctl`/`nmcli`/`brightnessctl` are detected, report conflicts with defaults. ⛓ FEAT-20, SVC-04, SVC-13
+- [ ] **FEAT-22** `P2` `feat` `v1.2` — Keep-your-own-config path: user fragments in `~/.config/i3-next/sway.d/*.conf` are included last, so import is optional; X11-only i3 directives are reported as unsupported. ⛓ SWAY-24
+
+_Epic D — Environment profiles (new_features #2)_
+
+- [ ] **FEAT-10** `P1` `feat` `v1.2` — `profiles.yaml` (versioned, validated): `when` (outputs connected by name/make-model/count, app running by `app_id`, AC power) and `apply` actions from a whitelist: `output {enable, scale, mode, pos, primary}`, `sway_set {gaps, border, opacity}`, `service {name, enabled}`, `theme`. Arbitrary `exec` only with an explicit `allow_exec: true`. ⛓ CFG-02
+- [ ] **FEAT-11** `P1` `feat` `v1.2` — Profile engine: event-driven (`OutputChanged`, window events), debounced, with priority/conflict rules, revert when the trigger ends (the game closes → previous profile) and a manual pin. ✅ table-driven decision tests; e2e: `create_output` ⇒ applied, `unplug` ⇒ reverted. ⛓ FEAT-10, SWAY-22
+- [ ] **FEAT-12** `P1` `feat` `v1.2` — Display actions go through the SVC-11 confirm/revert flow and never disable the last active output. Documented limits: Sway has no blur or animations, so "effects" means gaps, borders and opacity; font-size changes apply to GTK/Qt settings only. ⛓ SVC-11
+- [ ] **FEAT-13** `P1` `feat` `v1.2` — CLI: `i3-nextctl profile list|show|apply|pin|unpin|status`. ⛓ OBS-05
+- [ ] **FEAT-14** `P2` `feat` `v1.2` — UI to create and switch profiles from Quickshell. ⛓ UI-14
 
 ---
 
-## 6. Quickshell desktop shell
+## 4. Release gate
 
-### 6.1 Foundation
-- [ ] **UI-01** (P0) Real `Backend.qml`: connect to the socket (Quickshell `Socket` / `SplitParser`), handshake, reconnect with backoff, states `disconnected/connecting/connected/incompatible`. ⛓ API-04
-- [ ] **UI-02** (P0) `EventBridge.qml`: parse events and fill QML models (`ListModel`/`QtObject`) without blocking the UI thread.
-- [ ] **UI-03** (P0) A real startup flow `Main→Shell→Session` and a working `qmldir` (module `i3_next` with a discoverable import path, installed in `/usr/share/i3-next/quickshell`).
-- [ ] **UI-04** (P0) `Variants`/`Scope` per monitor; hotplug works (panel is created/removed). ✅ e2e with `create_output` / `unplug`.
-- [ ] **UI-05** (P0) Error handling: one failing component must not take down the whole shell (Loader with `onStatusChanged`); if the shell crashes, the supervisor restarts it. (⛓ CORE-12)
-- [ ] **UI-06** (P1) Separate theme tokens (`themes/default/Tokens.qml`) and live change from `Settings.qml`.
-- [ ] **UI-07** (P1) Logging/debug mode (`I3NEXT_UI_DEBUG=1`) and send errors to the daemon.
-- [ ] **UI-08** (P1) Different scales/resolutions; accessibility (focus, keyboard navigation, contrast ≥ 4.5:1, minimum font size).
-- [ ] **UI-09** (P0) `qmllint` required and clean in CI; smoke test: `quickshell -p ui/quickshell` starts with no errors in the VM.
+All items must be true at the same time; link each to an automatic test or recorded QA.
 
-### 6.2 Features (suggested order)
-- [ ] **UI-10** (P0) Panel: clock, workspaces, network, audio, battery (hidden if there is no battery). ⛓ SVC-*
-- [ ] **UI-11** (P0) Launcher: read desktop entries (XDG, `NoDisplay/Hidden/OnlyShowIn`), fuzzy search, safe launch (no shell; handle field codes `%u %f` correctly).
-- [ ] **UI-12** (P0) Session menu: logout/restart/shutdown with confirmation.
-- [ ] **UI-13** (P1) Notification popup + Notification Center. (⛓ SVC-03)
-- [ ] **UI-14** (P1) Control Center (audio, brightness, network, Bluetooth if present).
-- [ ] **UI-15** (P1) OSD (volume/brightness/workspace).
-- [ ] **UI-16** (P1) Task/window list.
-- [ ] **UI-17** (P1) Empty/loading/error/disconnected states for every view (checklist in the PR template).
-- [ ] **UI-18** (P1) Basic appearance/theme settings.
-
----
-
-## 7. System services
-
-### 7.1 Shared rules (before any service)
-- [ ] **SVC-00** (P0) Shared service template (`internal/services/<name>`): `enabled` config, optional dependency ⟵ `degraded` with a reason, timeout/cancel on operations, publish `ServiceStateChanged`, tests with a fake adapter. ✅ "Missing dependency" test.
-
-### 7.2 Must-have
-- [ ] **SVC-01** (P0) Session manager. (⛓ SES-*)
-- [ ] **SVC-02** (P1) Wallpaper: `swaybg` under the supervisor, multi-monitor.
-- [ ] **SVC-03** (P1) Notifications: implement `org.freedesktop.Notifications` on the session bus (clear error if another daemon owns the name), support actions/urgency/timeout, limit count and size. ⛓ DBUS-01
-- [ ] **SVC-04** (P1) Audio: PipeWire/WirePlumber (`wpctl` with an argument list, or a library), volume/mute/default device, change events.
-- [ ] **SVC-05** (P1) Network: NetworkManager D-Bus (read-only status in v1; no NM ⟵ degraded).
-- [ ] **SVC-06** (P1) Power: UPower (battery/AC) + logind (suspend/reboot/poweroff) with polkit.
-- [ ] **SVC-07** (P0) Lock screen: `swaylock` (a trusted tool); no fake lock. If the component crashes it must **fail closed** (the session must not open; with `ext-session-lock` the screen stays locked when the client dies). ✅ Manual/automatic test by killing swaylock.
-- [ ] **SVC-08** (P1) Idle: `swayidle` with a policy from config (lock/DPMS/suspend) and inhibit.
-- [ ] **SVC-09** (P1) Screenshot: `grim` / `slurp`, save to `XDG_PICTURES_DIR`, safe file names.
-- [ ] **SVC-10** (P1) Clipboard: `wl-clipboard` (get/set within v1 scope, no persistent history).
-- [ ] **SVC-11** (P1) Display: outputs/resolution/scale with mode validation (from `get_outputs`) and automatic revert after N seconds (like "Keep changes?").
-- [ ] **SVC-12** (P1) Media: MPRIS over D-Bus.
-- [ ] **SVC-13** (P1) Brightness (for Control Center): `brightnessctl` / logind `SetBrightness`.
-
-### 7.3 Can wait (P2)
-- [ ] Full Bluetooth, file search / command palette, clipboard history, layout manager, color picker, system monitor, workspace overview / animations, power profiles.
-
----
-
-## 8. D-Bus and system integration (`internal/adapters/dbus`)
-
-- [ ] **DBUS-01** (P0/P1) Choose a library (`godbus/dbus/v5`) + wrapper with reconnect/timeout and a split between session and system bus. A "which service uses which bus" table in `docs/architecture/dbus.md`.
-- [ ] **DBUS-02** (P1) Fake bus for tests (or `dbus-run-session` in e2e).
-- [ ] **DBUS-03** (P1) Validate D-Bus inputs (size/type/UTF-8).
-- [ ] **DBUS-04** (P1) polkit/logind for power: least privilege, no `sudo`.
-- [ ] **DBUS-05** (P2) D-Bus service file for activation (if needed). (⛓ PKG-05)
-- [ ] **DBUS-06** (P1) Test in an incomplete session (no UPower/NM/…).
-
----
-
-## 9. Plugin system
-
-- [ ] **PLG-00** (P0) **Final v1 decision:** suggested = external plugins **disabled** in v1; built-ins only. Record in an ADR and in `RELEASE_SCOPE.md`. ✅ No third-party loading code in the v1 build (or put it behind a `plugins` build tag).
-- [ ] **PLG-01** (P2) If enabled: versioned manifest + schema, permission model, trust/signing, resource limits, sandbox (bubblewrap/landlock/seccomp) with the real security boundary documented honestly.
-- [ ] **PLG-02** (P2) SDK and sample plugin, tests for malicious/broken plugins, API compatibility tests.
-- [ ] **PLG-03** (P1) If `plugins.yaml` is filled in v1: unknown plugin = rejected with a clear message.
-
----
-
-## 10. Storage
-
-- [ ] **STO-00** (P0) Decide which data really needs to persist. (Suggestion for v1: only small state, maybe even without SQLite, using atomic JSON.) If SQLite is not needed, remove it from the README/architecture or move it to v1.x.
-- [ ] **STO-01** (P1) If needed: pure-Go SQLite (`modernc.org/sqlite`, no CGO), WAL, `0600`, versioned migrations (`internal/storage/migrations`), repository interface.
-- [ ] **STO-02** (P1) DB corruption / failed migration: automatic backup, `quarantine`, start with a fresh DB and a warning; tests.
-- [ ] **STO-03** (P1) Retention/cleanup policy for cache and history; do not store sensitive data.
-- [ ] **STO-04** (P1) Backup/restore: `i3-nextctl backup|restore` (config + state).
-
----
-
-## 11. Security and privacy
-
-- [ ] **SEC-01** (P0) `docs/SECURITY.md` (threat model): assets, trust boundaries (socket, D-Bus, config, child processes, plugins), short STRIDE, assumptions.
-- [ ] **SEC-02** (P0) Review permissions of all files/sockets/locks with automatic tests. (⛓ FIX-07, API-02)
-- [ ] **SEC-03** (P0) Path traversal / symlinks: open files with `os.Root` / `openat2(RESOLVE_BENEATH)` or check `EvalSymlinks` + owner; for config, assets, and desktop entries.
-- [ ] **SEC-04** (P0) Security lint: `gosec` is on; no pointless `//nolint`. Add `govulncheck`. (⛓ FIX-12)
-- [ ] **SEC-05** (P0) Central input validation for IPC/D-Bus/config; fuzz the parsers.
-- [ ] **SEC-06** (P0) No secrets or personal paths in logs (redaction helper + test).
-- [ ] **SEC-07** (P0) Lock fails closed. (⛓ SVC-07)
-- [ ] **SEC-08** (P1) Harden the systemd user unit (`NoNewPrivileges`, `ProtectSystem`, … as far as the session allows).
-- [ ] **SEC-09** (P1) Supply chain: pin actions/tools, `go mod verify`, SBOM, release signing (cosign/minisign), reproducible builds (`-trimpath` is already used).
-- [ ] **SEC-10** (P1) `THIRD_PARTY_LICENSES.md` (generated with `go-licenses`) and a license compatibility check.
-- [ ] **SEC-11** (P0) Telemetry policy: **none** (documented in README/PRIVACY.md).
-- [ ] **SEC-12** (P1) Vulnerability disclosure process: the email / private reporting must really work (the current `SECURITY.md` is vague).
-
----
-
-## 12. Logging, diagnostics, observability
-
-- [ ] **OBS-01** (P0) Logger with fixed fields `component`, `version`, `commit`, `session_id`; output to journald in a real session and to `state_dir/logs/` in dev mode; rotation/size cap (`lumberjack`, or rely on journald).
-- [ ] **OBS-02** (P1) Log level from config and at runtime (`i3-nextctl log-level`); `AddSource` only in debug (already done).
-- [ ] **OBS-03** (P1) Actionable errors (a `hint=` key) separate from normal errors.
-- [ ] **OBS-04** (P0) Rewrite `i3-next-doctor`: checks use the shape `{id,status,detail,remedy}`; cover Sway (+version), Quickshell (+version), Qt6, Wayland env, D-Bus session/system, optional tools (swaylock, grim, wpctl, …), directory permissions, valid config, API socket; `--json`; exit codes (0 OK, 1 WARN with `--strict`, 2 FAIL). ✅ e2e `t_doctor_*`.
-- [ ] **OBS-05** (P0) `i3-nextctl`: a real API client; commands `status`, `stop`, `restart`, `config validate`, `services`, `log-level`; `--json` output; standard exit codes; remove the current `status` that prints a fixed string. ✅ e2e: with the daemon running, `status` ⟵ `running`.
-- [ ] **OBS-06** (P1) `i3-nextctl diagnostics bundle` with paths/user name/IP redacted.
-- [ ] **OBS-07** (P2) Simple internal metrics (counter/gauge in `status`) with no network export.
-
----
-
-## 13. Session, login, and session management
-
-- [ ] **SES-01** (P0) `packaging/wayland-sessions/i3-next.desktop` (`Exec=i3-next-session`, `Type=Application`).
-- [ ] **SES-02** (P0) Real `i3-next-session`: set env (`XDG_CURRENT_DESKTOP=i3-next:sway`, `XDG_SESSION_TYPE=wayland`, `XDG_SESSION_DESKTOP`, `MOZ_ENABLE_WAYLAND`, `QT_QPA_PLATFORM`…), run `dbus-update-activation-environment --systemd`, `systemctl --user import-environment`, start Sway, then `i3-nextd` / Quickshell in a fixed order. Using `systemd --user` targets (`i3-next-session.target`) is recommended. ✅
-- [ ] **SES-03** (P0) Prevent duplicate starts (lock / one `systemctl --user` unit).
-- [ ] **SES-04** (P0) Startup failure: show a message, log to `state_dir/logs/session-*.log`, fall back to a TTY/foot, and document recovery. ✅ Test with a broken daemon.
-- [ ] **SES-05** (P0) Clean logout: stop services (reverse order), `swaymsg exit`, remove socket/lock.
-- [ ] **SES-06** (P1) Restart the shell without logging out (`i3-nextctl shell restart`).
-- [ ] **SES-07** (P1) Suspend/resume and lock-before-sleep (logind inhibitor); manual test in QA.
-- [ ] **SES-08** (P1) Document dev mode (nested Sway) and real mode (display manager).
-- [ ] **SES-09** (P0) VM test: `make vm-gui` brings up a full session (autologin) with no manual steps, and a screenshot is saved.
-
----
-
-## 14. Packaging and install
-
-### 14.1 Build / release
-- [ ] **PKG-01** (P0) `make build` is the only build source; remove `scripts/build.sh` or make it a thin wrapper; standard `make install DESTDIR=… PREFIX=…` (binaries, configs, QML, session, docs).
-- [ ] **PKG-02** (P0) Same ldflags from `internal/version`. (⛓ FIX-04) ✅ In a release, `i3-nextd --version` shows the real commit and date (not `dev/unknown`).
-- [ ] **PKG-03** (P1) Separate debug/release builds; `-trimpath`, `CGO_ENABLED=0` for release.
-- [ ] **PKG-04** (P1) SBOM (`syft` / `cyclonedx-gomod`), checksums, signing.
-
-### 14.2 Packages
-- [ ] **PKG-10** (P0) `.deb` for Ubuntu 24.04 and Debian 13 (`packaging/debian/`): `Depends` (sway, quickshell\*, qt6 runtime, dbus-user-session, …), `Recommends` (pipewire, network-manager, upower, swaylock, swayidle, grim, slurp, wl-clipboard), clean `lintian`. ✅ Installs on a clean VM of both distros. (\*Quickshell may be missing on Ubuntu 24.04 ⟵ decide: PPA / backport / vendoring, and write it in the docs.)
-- [ ] **PKG-11** (P0) postinst/prerm: never touch user config; upgrade keeps config; purge only with consent.
-- [ ] **PKG-12** (P1) systemd user units and dbus/polkit files.
-- [ ] **PKG-13** (P2) PKGBUILD (Arch, best effort).
-- [ ] **PKG-14** (P1) Automatic install/upgrade/uninstall test on a VM. (⛓ QA-05)
-- [ ] **PKG-15** (P1) Decide and document: install from a repository (APT repo / release assets) or offline.
-
-### 14.3 Scripts
-- [ ] **PKG-20** (P1) `scripts/dev-setup.sh` is idempotent; `scripts/install.sh` has `--prefix`, `--dry-run`, checks prerequisites, and touches **only files it owns** (install manifest); `uninstall.sh` uses the same manifest. ✅ shellcheck + test with a path that has spaces.
-- [ ] **PKG-21** (P1) No script overwrites a user file without a backup.
-
----
-
-## 15. Testing and QA
-
-### 15.1 Go
-- [ ] **QA-01** (P0) Unit tests for every new package (target: critical paths in core/config/api/sway ≥ 80% line coverage; focus on behavior).
-- [ ] **QA-02** (P0) `go test -race -count=1 ./...` + `goleak`.
-- [ ] **QA-03** (P1) Fuzz: IPC framing, JSON-RPC, config parser, desktop entry parser.
-- [ ] **QA-04** (P1) Fix flaky tests (`-count=20` in nightly).
-
-### 15.2 Integration / E2E (building on `tests/e2e/run.sh`)
-- [ ] **QA-05** (P0) New e2e tests: daemon+Sway connect/reconnect, real `nextctl status`, socket permissions, broken config, full display-manager login (VM GUI), logout, crash of daemon/shell/lock, multi-monitor/scale, missing optional deps, upgrade/uninstall, `.deb` install.
-- [ ] **QA-06** (P1) Run e2e in CI (a runner with `/dev/kvm`, or a headless-only subset without a VM) + upload artifacts (`tests/vm/.state/artifacts`).
-- [ ] **QA-07** (P1) Long soak test (≥ 8h) measuring RSS/FD/goroutines.
-- [ ] **QA-08** (P1) VM matrix: Debian 13 and Ubuntu 24.04 (a second image in `vm.sh`).
-
-### 15.3 Manual QA
-- [ ] **QA-10** (P0) `docs/development/qa-checklist.md`: keyboard/mouse/touchpad/multi-monitor, sleep/resume, network connect/disconnect, audio device change, GTK/Qt/Electron apps, many notifications, recovery from broken config/daemon/UI.
-- [ ] **QA-11** (P0) At least one full day-to-day use cycle on real hardware (result in `docs/release/rc-report.md`).
-
----
-
-## 16. Performance and reliability
-
-- [ ] **PERF-01** (P1) Baseline and budget (in `docs/release/performance.md`): login→desktop ready ≤ 5s, idle daemon RAM ≤ 50 MiB, shell ≤ 250 MiB, idle CPU < 2%.
-- [ ] **PERF-02** (P1) Measure startup time of each component (trace timings in the log).
-- [ ] **PERF-03** (P1) Debounce/throttle frequent events (`window::title`, `input`) without losing essential events.
-- [ ] **PERF-04** (P1) Memory limits for queues/caches. (⛓ CORE-21)
-- [ ] **PERF-05** (P1) Tests for disk full, EACCES, process hang, full socket.
-- [ ] **PERF-06** (P1) `go test -bench` benchmarks for event bus/state/IPC parser, with a baseline in CI (warn on regression).
-
----
-
-## 17. Documentation
-
-- [ ] **DOC-01** (P0) README: real status, install commands per distro (Ubuntu 24.04 / Debian 13), full dependency list (including `foot`, `jq`, `rsync`) matching `guest-provision.sh`, build/run/test, link to the KVM lab.
-- [ ] **DOC-02** (P0) `docs/user-guide/`: install, choosing the session in the display manager, first run, shortcuts, config.
-- [ ] **DOC-03** (P0) `docs/troubleshooting.md` + `docs/recovery.md` (broken config, daemon will not start, black UI, going back to plain Sway).
-- [ ] **DOC-04** (P1) `docs/api/` and `docs/config/`. (⛓ API-10, CFG-11)
-- [ ] **DOC-05** (P1) Backup/restore/upgrade/uninstall.
-- [ ] **DOC-06** (P1) ADRs (`docs/architecture/adr/`) for the RPC, plugin, storage, and session decisions.
-- [ ] **DOC-07** (P1) Update `OVERVIEW.md` with a real diagram and the "Core does not depend on UI" rule.
-- [ ] **DOC-08** (P1) Real UI screenshots (from `vm.sh screenshot`) and Known Issues.
-- [ ] **DOC-09** (P2) Plugin guide, only if plugins are enabled.
-
----
-
-## 18. CI/CD and release engineering
-
-- [ ] **CI-01** (P0) Strengthen the current CI (⛓ FIX-12): matrix, cache, pinning, `govulncheck`, real `qmllint`, shellcheck.
-- [ ] **CI-02** (P1) Build job on Ubuntu 24.04 and Debian 13 (containers) and build the `.deb` as an artifact.
-- [ ] **CI-03** (P1) e2e/VM job (self-hosted or nightly). (⛓ QA-06)
-- [ ] **CI-04** (P0) Release workflow on tag `vX.Y.Z`: build, test, `.deb`, checksums, SBOM, signing, GitHub Release with changelog.
-- [ ] **CI-05** (P1) Dependabot/Renovate for Go modules and Actions.
-- [ ] **CI-06** (P1) Conventional Commits check or automatic changelog.
-- [ ] **CI-07** (P0) A release candidate (`v1.0.0-rc.N`) before the final; document rollback / installing the previous version.
-- [ ] **CI-08** (P1) Branch protection: PRs required, CI green, at least one review.
-
----
-
-## 19. Release Gate — final checklist
-
-> All items must be true at the same time. Link each item to an automatic test or recorded QA.
-
-- [ ] `.deb` installs on a clean Ubuntu 24.04 **and** Debian 13 system (QA-05 / PKG-14)
-- [ ] Login from the display manager into the i3_next session; Sway + daemon + Quickshell start automatically (SES-09)
-- [ ] Panel and launcher are usable (UI-10/11)
-- [ ] Window/workspace management and multi-monitor work (SWAY-20..22)
-- [ ] Notifications work (SVC-03 / UI-13)
-- [ ] Audio/network/battery are reported correctly (SVC-04..06)
-- [ ] Lock/logout/reboot/shutdown are safe; lock fails closed (SVC-07, SES-05)
-- [ ] If the backend disconnects the UI does not die and it reconnects (UI-01, API-09)
-- [x] Broken config does not lose the session or cause a restart loop (CFG-07)
-- [ ] Uninstall/upgrade do not delete user data (PKG-11)
-- [ ] CI is green; no open blocker/critical bugs
-- [ ] `govulncheck` and dependency scan show no critical findings (SEC-04)
-- [ ] Install/troubleshooting/recovery docs are published (DOC-01..03)
-- [ ] Version/commit/date/changelog are visible in artifacts (PKG-02)
+- [ ] `go build ./...`, `make check` and `make vm-test` are green, and the e2e suite fails when a test fails (FIX-17, FIX-18, FIX-19)
+- [ ] `.deb` installs on a clean Ubuntu 24.04 **and** Debian 13 system (PKG-10, PKG-14)
+- [ ] Login from the display manager into the i3_next session; Sway, daemon and Quickshell start automatically (SES-09)
+- [ ] Panel and launcher are usable (UI-10, UI-11)
+- [ ] Window/workspace management and multi-monitor work (SWAY-20, SWAY-22)
+- [ ] Notifications work (SVC-03, UI-13)
+- [ ] Audio, network and battery are reported correctly (SVC-04, SVC-05, SVC-06)
+- [ ] Lock, logout, reboot and shutdown are safe; lock fails closed (SVC-07, SES-05)
+- [ ] A backend disconnect does not kill the UI and it reconnects; a shell crash recovers (UI-01, API-09, FEAT-01)
+- [x] A broken config does not lose the session or cause a restart loop (CFG-07)
+- [ ] Uninstall and upgrade do not delete user data (PKG-11)
+- [ ] CI is green and there are no open blocker/critical bugs
+- [ ] `govulncheck` and the dependency scan show no critical findings (SEC-04)
+- [ ] Install, troubleshooting and recovery docs are published (DOC-01, DOC-02, DOC-03)
+- [ ] Version, commit, date and changelog are visible in artifacts (PKG-02)
 - [ ] RC tested on real hardware and the result is recorded (QA-11)
 - [ ] Known Issues and the bug-report path are published (DOC-08, SEC-12)
 
 ---
 
-## 20. Milestones with exit criteria
+## 5. Milestones and risks
 
-| # | Milestone | Sections | Exit criteria (measurable) |
-|---|---|---|---|
-| M0 | Scope & quick wins | 0, 1 (`FIX-*`) | All P0 `FIX-*` closed; `make`, `make check`, `make vm-test` green; one version everywhere |
-| M1 | Core runtime | 2, 3, 12 | Daemon with fake services: order/rollback/shutdown/supervisor/config tested; real `nextctl status` (config fallback/migration done: CFG-07/08) |
-| M2 | Sway & API | 4, 5 | e2e: daemon ⟷ headless Sway, reconnect, JSON-RPC with version + peercred, contract tests |
-| M3 | First usable shell | 6, 7 (Must) | Panel + launcher + session menu on the VM; multi-monitor; UI reconnect |
-| M4 | Session | 8, 13 | Login from the DM in the VM with no manual steps; clean logout; recovery documented |
-| M5 | Persistence & security | 10, 11 | Threat model; permissions; fuzz; lock fails closed; clean `govulncheck` |
-| M6 | Packaging & docs | 14, 17 | `.deb` install/upgrade/uninstall on both distros; docs complete |
-| M7 | QA & hardening | 15, 16 | 8-hour soak with no leaks; performance budget; manual QA |
-| M8 | RC & release | 18, 19 | `v1.0.0-rc.N` ⟵ full Release Gate ⟵ `v1.0.0` |
+| #   | Milestone                    | Scope                                                        | Exit criteria (measurable)                                                                                            |
+| --- | ---------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| M0  | Unbreak                      | FIX-17 … FIX-21                                              | `go build ./...`, `make check`, `make vm-test` green; e2e exits non-zero when a test fails; no stub session installed |
+| M1  | Core wired                   | CORE-30, SWAY-04, API-02…API-04, OBS-05                      | daemon runs Sway adapter + workspace service + shell; `i3-nextctl status` answers over the secure socket              |
+| M2  | Session MVP                  | SES-02, SES-04, SES-05, SES-09, SWAY-24, UI-01, UI-03, UI-10 | VM login with no manual steps shows a panel; clean logout; recovery documented                                        |
+| M3  | Usable shell                 | UI-11…UI-14, SVC-02…SVC-09, SVC-11                           | launcher, notifications, audio, battery, screenshot, display revert in the VM                                         |
+| M4  | Self-healing and security    | FEAT-01, FEAT-02, SVC-07, SEC-03, SEC-05, SEC-06             | shell crash recovers; Sway watchdog works; lock fails closed; fuzzers and `govulncheck` clean                         |
+| M5  | Packaging and docs           | PKG-10…PKG-14, DOC-01…DOC-03                                 | `.deb` install/upgrade/uninstall on both distros; docs complete                                                       |
+| M6  | QA and RC                    | QA-05…QA-11, PERF-01, CI-04, CI-07                           | 8 h soak without leaks; budget met; `v1.0.0-rc.N` passes the release gate                                             |
+| M7  | Release                      | section 4                                                    | `v1.0.0`                                                                                                              |
+| F1  | v1.1 — recovery and adoption | FEAT-03…FEAT-06, FEAT-20, FEAT-21                            | snapshot save/restore and `import-sway` pass their e2e and fuzz tests                                                 |
+| F2  | v1.2 — profiles              | FEAT-10…FEAT-14, FEAT-22                                     | output-driven profiles apply and revert safely                                                                        |
 
-### Known risks (track these)
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Quickshell is missing or old on Ubuntu 24.04 / Debian 13 | Tier-1 install blocker | Decide early: PPA / backport / vendoring; test in the VM in M3 |
-| Go `1.27.3` may not be available on distros/CI | Build blocker | FIX-05 in M0 |
-| Insecure or fake lock screen | Security risk | Only swaylock / ext-session-lock + fail-closed test |
-| UI/service scope is large | Delays | Re-prioritize P1/P2 in M3; Must services are only section 7.2 P0/P1 |
-| No KVM runner in CI | e2e only runs locally | Headless subset without a VM in CI + self-hosted nightly |
+| Risk                                                       | Impact                                      | Mitigation                                                                            |
+| ---------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Quickshell missing or old on Ubuntu 24.04 / Debian 13      | Tier-1 install blocker                      | decide early (PPA / backport / vendoring); test in the VM at M2                       |
+| False-green tests and a non-compiling package go unnoticed | broken releases                             | M0 first; CI must run `go build ./...` and the e2e exit code                          |
+| Restarting Sway ends all Wayland clients                   | self-heal cannot preserve application state | document the limit; FEAT-03…FEAT-05 relaunch apps and restore placement only          |
+| Restore/import executes data from files                    | command injection                           | whitelist and size-limit every field; only desktop-entry commands; fuzz; SEC-03 first |
+| A profile or display change blanks the screen              | user locked out                             | SVC-11 confirm/revert; never disable the last output                                  |
+| Insecure or fake lock screen                               | security                                    | swaylock / `ext-session-lock` only, plus the fail-closed test                         |
+| No KVM runner in CI                                        | e2e only runs locally                       | headless subset in CI plus a self-hosted nightly                                      |
+| UI/service scope is large                                  | delays                                      | re-derive the queue (section 2) after every merge; defer P2                           |
 
 ---
 
-## Release progress log
+## 6. Progress log
 
-| Item | Value |
-|---|---|
-| Target version | `1.0.0` |
-| Current status | Planning → M0 (quick wins) |
-| Release owner | TBD |
-| Target distributions | Ubuntu LTS 24.04, Debian Stable 13 (amd64) |
-| Target release date | TBD |
-| Latest release candidate | TBD |
-| Known blockers | FIX-05 (Go version), Quickshell on Tier-1, decisions on PLG-00 / STO-00 |
+Newest first. One line per merged change that moves a task or the status table.
+
+| Date       | Change                                                                                                                                                                                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-11-07 | Re-baselined after a static review: new structure (sections 0–6) and priority rubric; added FIX-17 … FIX-32; reopened CFG-02/05/06/09/10/12, CORE-05/10…14/20/21/24, SWAY-05/20 as `[~]`; closed SEC-01; added CORE-30, DOC-10, DOC-11 and the FEAT-\* epics from `docs/new_features.md`; added `docs/development/todo-structure.md` |
+| 2026-11-05 | v1 scope frozen in `docs/RELEASE_SCOPE.md`                                                                                                                                                                                                                                                                                           |
