@@ -147,17 +147,35 @@ func (c *Client) clearDeadline() {
 func (c *Client) RunCommand(ctx context.Context, command string) (Message, error) {
 	return c.Request(ctx, RunCommand, []byte(command))
 }
-func (c *Client) GetWorkspaces(ctx context.Context) (Message, error) {
-	return c.Request(ctx, GetWorkspaces, nil)
+func (c *Client) GetWorkspaces(ctx context.Context) ([]Workspace, error) {
+	reply, err := c.Request(ctx, GetWorkspaces, nil)
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalWorkspaces(reply.Payload)
 }
-func (c *Client) GetOutputs(ctx context.Context) (Message, error) {
-	return c.Request(ctx, GetOutputs, nil)
+func (c *Client) GetInputs(ctx context.Context) ([]Input, error) {
+	reply, err := c.Request(ctx, GetInputs, nil)
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalInputs(reply.Payload)
 }
-func (c *Client) GetTree(ctx context.Context) (Message, error) {
-	return c.Request(ctx, GetTree, nil)
+
+func (c *Client) GetOutputs(ctx context.Context) ([]Output, error) {
+	reply, err := c.Request(ctx, GetOutputs, nil)
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalOutputs(reply.Payload)
 }
-func (c *Client) GetInputs(ctx context.Context) (Message, error) {
-	return c.Request(ctx, GetInputs, nil)
+
+func (c *Client) GetTree(ctx context.Context) (*Node, error) {
+	reply, err := c.Request(ctx, GetTree, nil)
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalTree(reply.Payload)
 }
 func (c *Client) GetVersion(ctx context.Context) (*Version, error) {
 	reply, err := c.Request(ctx, GetVersion, nil)

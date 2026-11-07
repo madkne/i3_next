@@ -86,12 +86,12 @@ func TestClientRequestReply(t *testing.T) {
 		t.Fatalf("version %+v", v)
 	}
 
-	m, err = cl.GetWorkspaces(ctx)
+	ws, err := cl.GetWorkspaces(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(m.Payload) != `[{"num":1,"name":"1","focused":true}]` {
-		t.Fatalf("payload %q", m.Payload)
+	if len(ws) != 1 || ws[0].Num != 1 || ws[0].Name != "1" || !ws[0].Focused {
+		t.Fatalf("workspaces %+v", ws)
 	}
 }
 
