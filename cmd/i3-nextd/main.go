@@ -24,6 +24,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	var (
 		showVersion = flag.Bool("version", false, "Show version")
 		debug       = flag.Bool("debug", false, "Enable debug logging")
@@ -32,24 +38,21 @@ func main() {
 
 	if *showVersion {
 		fmt.Printf("i3_next %s (%s, %s)\n", version.Version, version.Commit, version.BuildDate)
-		return
+		return nil
 	}
 
 	logger := logging.New(*debug)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Load the service configuration (embedded defaults, config dir, env).
 	merged, err := config.LoadMergedBytes("services.yaml", config.DefaultServices, config.LoadOptions{Env: true})
 	if err != nil {
-		logger.Error("failed to load services configuration", slog.Any("error", err))
-		stop()
-		os.Exit(1)
+		return fmt.Errorf("failed to load services configuration: %w", err)
 	}
 	servicesCfg, err := config.ParseServices(merged)
 	if err != nil {
-		logger.Error("failed to parse services configuration", slog.Any("error", err))
-		stop()
-		os.Exit(1)
+		return fmt.Errorf("failed to parse services configuration: %w", err)
 	}
 
 	bus := eventbus.New()
@@ -157,29 +160,13 @@ func main() {
 	}
 	app, err := bootstrap.New(logger, opts...)
 	if err != nil {
-		logger.Error("failed to initialize application", slog.Any("error", err))
-		stop()
-		cancelState()
-		for _, c := range eventCancels {
-			c()
-		}
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize application: %w", err)
 	}
 
 	if err := app.Run(ctx); err != nil {
-		logger.Error("application stopped with error", slog.Any("error", err))
-		stop()
-		cancelState()
-		for _, c := range eventCancels {
-			c()
-		}
-		os.Exit(1)
+		return fmt.Errorf("application stopped with error: %w", err)
 	}
 
-	stop()
-	cancelState()
-	for _, c := range eventCancels {
-		c()
-	}
 	logger.Info("i3_next stopped successfully")
+	return nil
 }
