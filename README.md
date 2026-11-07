@@ -56,9 +56,9 @@ sudo apt install -y \
     wireplumber \
     libwayland-dev \
     wayland-protocols \
-    qemu-system-x86 libvirt-daemon-system virtinst virt-viewer genisoimage rsync
+    qemu-system-x86 libvirt-daemon-system virtinst virt-viewer genisoimage 
 
-    sudo usermod -aG libvirt,kvm $USER
+sudo usermod -aG libvirt,kvm $USER
 
 ```
 

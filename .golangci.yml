@@ -8,6 +8,7 @@ run:
 linters:
   default: standard
   enable:
+    - depguard
     - govet
     - staticcheck
     - unused
@@ -22,6 +23,67 @@ linters:
     - noctx
     - gosec
   settings:
+    depguard:
+      # Import-layering rule: core <- adapters/services <- api.
+      # Dependencies only flow downward (toward api/stdlib); no package may
+      # import a layer above itself, and nothing may import cmd. Enforced via
+      # deny lists so stdlib, third-party test deps (goleak), and same-layer
+      # imports keep working.
+      rules:
+        api:
+          files:
+            - "internal/api/**/*.go"
+          deny:
+            - pkg: i3_next/internal/core
+              desc: "api is the shared kernel; it must not import core"
+            - pkg: i3_next/internal/adapters
+              desc: "api must not import adapters"
+            - pkg: i3_next/internal/services
+              desc: "api must not import services"
+            - pkg: i3_next/internal/app
+              desc: "api must not import app"
+            - pkg: i3_next/cmd
+              desc: "api must not import cmd"
+        core:
+          files:
+            - "internal/core/**/*.go"
+          deny:
+            - pkg: i3_next/internal/app
+              desc: "core must not import app"
+            - pkg: i3_next/internal/adapters
+              desc: "core must not import adapters"
+            - pkg: i3_next/internal/services
+              desc: "core must not import services"
+            - pkg: i3_next/cmd
+              desc: "core must not import cmd"
+        adapters:
+          files:
+            - "internal/adapters/**/*.go"
+          deny:
+            - pkg: i3_next/internal/app
+              desc: "adapters must not import app"
+            - pkg: i3_next/cmd
+              desc: "adapters must not import cmd"
+        services:
+          files:
+            - "internal/services/**/*.go"
+          deny:
+            - pkg: i3_next/internal/app
+              desc: "services must not import app"
+            - pkg: i3_next/cmd
+              desc: "services must not import cmd"
+        app:
+          files:
+            - "internal/app/**/*.go"
+          deny:
+            - pkg: i3_next/cmd
+              desc: "app must not import cmd"
+        cmd:
+          files:
+            - "cmd/**/*.go"
+          deny:
+            - pkg: i3_next/cmd
+              desc: "cmd must not import itself"
     misspell:
       locale: US
     revive:

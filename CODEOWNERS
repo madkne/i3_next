@@ -1,0 +1,30 @@
+# CODEOWNERS
+
+# Default owners for everything in the repository.
+* @i3_next/maintainers
+
+# Go desktop core (domain layer, services, API contracts).
+/internal/core/ @i3_next/maintainers
+/internal/app/ @i3_next/maintainers
+/internal/api/ @i3_next/maintainers
+
+# Adapters to external systems (Sway, D-Bus, ...).
+/internal/adapters/ @i3_next/maintainers
+
+# System services (session, notifications, audio, ...).
+/internal/services/ @i3_next/maintainers
+
+# Packaging (deb, systemd, wayland sessions, ...).
+/packaging/ @i3_next/maintainers
+
+# CI, issue/PR templates, and repository tooling.
+/.github/ @i3_next/maintainers
+
+# Documentation.
+/docs/ @i3_next/maintainers
+
+# Build and install scripts.
+/scripts/ @i3_next/maintainers
+
+# Tests (e2e and VM).
+/tests/ @i3_next/maintainers
