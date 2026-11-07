@@ -51,6 +51,7 @@ type ReconnectingAdapter struct {
 
 	readerCancel context.CancelFunc
 	readerDone   chan struct{}
+	runCtx       context.Context // parent for event readers; set in Start
 
 	connected atomic.Bool
 	done      chan struct{}
@@ -104,6 +105,7 @@ func (a *ReconnectingAdapter) Start(ctx context.Context) error {
 		return coreerrors.ErrAlreadyRunning
 	}
 	a.cancel = cancel
+	a.runCtx = runCtx
 	a.done = make(chan struct{})
 	a.mu.Unlock()
 
@@ -116,6 +118,7 @@ func (a *ReconnectingAdapter) Stop(ctx context.Context) error {
 	a.mu.Lock()
 	cancel := a.cancel
 	a.cancel = nil
+	a.runCtx = nil
 	client := a.client
 	a.client = nil
 	if a.readerCancel != nil {
@@ -208,10 +211,11 @@ func (a *ReconnectingAdapter) Subscribe(ctx context.Context, events []string) (<
 	a.subs[id] = &sub{events: append([]string(nil), events...), ch: ch}
 	a.events = unionEvents(a.subs)
 	client := a.client
+	parent := a.runCtx
 	a.mu.Unlock()
 
-	if client != nil {
-		go a.subscribeAndRead(client)
+	if client != nil && parent != nil {
+		go a.subscribeAndRead(parent, client)
 	}
 	return ch, nil
 }
@@ -252,7 +256,7 @@ func (a *ReconnectingAdapter) run(ctx context.Context) {
 		a.setConnected(true)
 		a.logger.Info("sway: connected")
 		if len(a.currentEvents()) > 0 {
-			go a.subscribeAndRead(client)
+			go a.subscribeAndRead(ctx, client)
 		}
 		select {
 		case <-client.readerDone:
@@ -302,20 +306,20 @@ func (a *ReconnectingAdapter) setConnected(v bool) {
 	a.connected.Store(v)
 }
 
-func (a *ReconnectingAdapter) subscribeAndRead(client *Client) {
+func (a *ReconnectingAdapter) subscribeAndRead(parent context.Context, client *Client) {
 	a.mu.Lock()
 	events := append([]string(nil), a.events...)
 	if a.client != client || a.readerCancel != nil || len(events) == 0 {
 		a.mu.Unlock()
 		return
 	}
-	readerCtx, cancel := context.WithCancel(context.Background())
+	readerCtx, cancel := context.WithCancel(parent)
 	rd := make(chan struct{})
 	a.readerCancel = cancel
 	a.readerDone = rd
 	a.mu.Unlock()
 
-	cech, err := client.Subscribe(context.Background(), events)
+	cech, err := client.Subscribe(readerCtx, events)
 	if err != nil {
 		a.logger.Warn("sway: subscribe failed", slog.Any("error", err))
 		cancel()

@@ -36,6 +36,17 @@ fi
 # 3. Static analysis (vet, lint, staticcheck)
 echo ""
 echo "[3/6] Running vet / lint / staticcheck..."
+
+# Ensure GOPATH/bin is on PATH so locally installed tools
+# (golangci-lint, staticcheck, ...) are found by `command -v`.
+if command -v go >/dev/null 2>&1; then
+    GOPATH_BIN="$(go env GOPATH)/bin"
+    case ":$PATH:" in
+        *":$GOPATH_BIN:"*) ;;
+        *) export PATH="$PATH:$GOPATH_BIN" ;;
+    esac
+fi
+
 go vet ./...
 if command -v golangci-lint >/dev/null 2>&1; then
     golangci-lint run ./...
