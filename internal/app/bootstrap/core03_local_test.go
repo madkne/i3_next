@@ -102,7 +102,9 @@ func TestCORE03OptionalWrapper(t *testing.T) {
 		t.Fatal("expected degraded")
 	}
 	cancel()
-	<-done
+	if err := <-done; err != nil {
+		t.Logf("run returned: %v", err)
+	}
 	_ = io.Discard
 	_ = slog.Default()
 }

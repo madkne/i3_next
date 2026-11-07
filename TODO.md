@@ -93,11 +93,11 @@
 - [x] **CORE-07** (P1) Daemon status and the reason for the last failure are kept in state (`status` API) and in `state_dir/last-failure.json`.
 
 ### 2.2 Process supervisor (`internal/app/supervisor`)
-- [ ] **CORE-10** (P0) Run processes with `exec.CommandContext` and an argument list (no shell); validate the path with `LookPath` and check owner/permissions. ✅
-- [ ] **CORE-11** (P0) Capture stdout/stderr into structured logs (line-split, size-capped); record exit code/signal. ✅
-- [ ] **CORE-12** (P0) Restart policy: `max_restarts` within a `window`, exponential backoff with jitter; above the limit ⟵ `failed/degraded`, no loop. ✅ Test with a process that always crashes.
-- [ ] **CORE-13** (P0) Stopping a child: SIGTERM ⟵ grace period ⟵ SIGKILL on the process group (`Setpgid`); no orphans after the daemon dies (`Pdeathsig`). ✅ e2e test.
-- [ ] **CORE-14** (P1) Environment allowlist for children, and redact sensitive variables (`*TOKEN*`, `*SECRET*`, `*PASSWORD*`) in logs.
+- [x] **CORE-10** (P0) Run processes with `exec.CommandContext` and an argument list (no shell); validate the path with `LookPath` and check owner/permissions. ✅
+- [x] **CORE-11** (P0) Capture stdout/stderr into structured logs (line-split, size-capped); record exit code/signal. ✅
+- [x] **CORE-12** (P0) Restart policy: `max_restarts` within a `window`, exponential backoff with jitter; above the limit ⟵ `failed/degraded`, no loop. ✅ Test with a process that always crashes.
+- [x] **CORE-13** (P0) Stopping a child: SIGTERM ⟵ grace period ⟵ SIGKILL on the process group (`Setpgid`); no orphans after the daemon dies (`Pdeathsig`). ✅ e2e test.
+- [x] **CORE-14** (P1) Environment allowlist for children, and redact sensitive variables (`*TOKEN*`, `*SECRET*`, `*PASSWORD*`) in logs.
 
 ### 2.3 Event bus and state
 - [ ] **CORE-20** (P0) `internal/core/eventbus` with generics: `Subscribe[T](topic) (<-chan T, cancel)`. ✅

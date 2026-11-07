@@ -922,18 +922,18 @@ func killService(svc any, logger *slog.Logger) {
 			mt := m.Type()
 			if mt.NumIn() == 0 && mt.NumOut() <= 1 {
 				func() {
-					defer func() { recover() }()
+					defer func() { _ = recover() }()
 					m.Call(nil)
 				}()
 				return
 			}
 			if mt.NumIn() == 1 && mt.In(0) == reflect.TypeOf((*context.Context)(nil)).Elem() && mt.NumOut() <= 1 {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				defer cancel()
 				func() {
-					defer func() { recover() }()
+					defer func() { _ = recover() }()
 					m.Call([]reflect.Value{reflect.ValueOf(ctx)})
 				}()
+				cancel()
 				return
 			}
 		}
@@ -1126,8 +1126,7 @@ func ServiceRequired(v any) bool {
 			mt := m.Type()
 			if mt.NumIn() == 0 && mt.NumOut() == 1 {
 				out := m.Call(nil)[0]
-				switch out.Kind() {
-				case reflect.String:
+				if out.Kind() == reflect.String {
 					return out.String() == "required"
 				}
 			}
