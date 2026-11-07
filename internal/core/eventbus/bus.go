@@ -110,6 +110,7 @@ type subscriberQueue[T any] struct {
 	stateVal T
 	hasState bool
 	closed   bool
+	once     sync.Once
 	closedCh chan struct{}
 }
 
@@ -119,13 +120,24 @@ func newSubscriberQueue[T any]() *subscriberQueue[T] {
 	return q
 }
 
+func (q *subscriberQueue[T]) close() {
+	q.once.Do(func() {
+		q.mu.Lock()
+		q.closed = true
+		q.mu.Unlock()
+		q.cond.Broadcast()
+		close(q.closedCh)
+	})
+}
+
 // Subscribe subscribes to topic for events of type T.
-func (b *Bus) Subscribe[T any](topic string) (ch <-chan T, cancel func()) {
-	return b.SubscribeBuffered[T](topic, b.bufferSize)
+func Subscribe[T any](b *Bus, topic string) (ch <-chan T, cancel func()) {
+	buf := b.bufferSize
+	return SubscribeBuffered[T](b, topic, buf)
 }
 
 // SubscribeBuffered subscribes with an explicit buffer size.
-func (b *Bus) SubscribeBuffered[T any](topic string, buffer int) (ch <-chan T, cancel func()) {
+func SubscribeBuffered[T any](b *Bus, topic string, buffer int) (ch <-chan T, cancel func()) {
 	if buffer <= 0 {
 		buffer = b.bufferSize
 		if buffer <= 0 {
@@ -138,9 +150,10 @@ func (b *Bus) SubscribeBuffered[T any](topic string, buffer int) (ch <-chan T, c
 	q := newSubscriberQueue[T]()
 	out := make(chan T, buffer)
 
-	// state-slot pump goroutine (isolates panics)
+	// state-slot pump goroutine (isolates panics). It owns closing out.
 	go func() {
 		defer func() { _ = recover() }()
+		defer close(out)
 		for {
 			q.mu.Lock()
 			for !q.hasState && !q.closed {
@@ -170,18 +183,24 @@ func (b *Bus) SubscribeBuffered[T any](topic string, buffer int) (ch <-chan T, c
 			return ErrTypeMismatch
 		}
 		q.mu.Lock()
-		defer q.mu.Unlock()
 		if q.closed {
+			q.mu.Unlock()
 			return ErrBusClosed
 		}
 		if opts.state || opts.coalesce {
 			// coalesce: only the latest value matters
 			q.stateVal = v
 			q.hasState = true
+			q.mu.Unlock()
 			q.cond.Broadcast()
 			return nil
 		}
+		q.mu.Unlock()
+		// Non-coalesced: enqueue checks closed state before send; pump owns
+		// closing out after observing closed, so no send races with close.
 		select {
+		case <-q.closedCh:
+			return ErrBusClosed
 		case out <- v:
 			return nil
 		default:
@@ -193,14 +212,12 @@ func (b *Bus) SubscribeBuffered[T any](topic string, buffer int) (ch <-chan T, c
 		}
 	}
 
+	var cancelOnce sync.Once
 	cancel = func() {
-		q.mu.Lock()
-		q.closed = true
-		q.mu.Unlock()
-		q.cond.Broadcast()
-		close(q.closedCh)
-		b.removeSubscription(topic, id)
-		// close out after pump exits; best-effort
+		cancelOnce.Do(func() {
+			q.close()
+			b.removeSubscription(topic, id)
+		})
 	}
 
 	sub := &subscription{id: id, topic: topic, typeOf: t, enqueue: enqueue, cancel: cancel}
@@ -212,23 +229,16 @@ func (b *Bus) SubscribeBuffered[T any](topic string, buffer int) (ch <-chan T, c
 	b.subs[topic] = append(b.subs[topic], sub)
 	b.mu.Unlock()
 
-	// close out when canceled
-	go func() {
-		<-q.closedCh
-		// wait for pump exit? small delay
-		close(out)
-	}()
-
 	return out, cancel
 }
 
 // SubscribeChan is an alias for SubscribeBuffered.
-func (b *Bus) SubscribeChan[T any](topic string, buffer int) (ch <-chan T, cancel func()) {
-	return b.SubscribeBuffered[T](topic, buffer)
+func SubscribeChan[T any](b *Bus, topic string, buffer int) (ch <-chan T, cancel func()) {
+	return SubscribeBuffered[T](b, topic, buffer)
 }
 
 // Publish publishes an event to all subscribers of topic with matching type.
-func (b *Bus) Publish[T any](topic string, value T, opts ...PublishOption) error {
+func Publish[T any](b *Bus, topic string, value T, opts ...PublishOption) error {
 	if topic == "" {
 		return ErrInvalidTopic
 	}
@@ -268,18 +278,22 @@ func (b *Bus) Publish[T any](topic string, value T, opts ...PublishOption) error
 }
 
 // PublishEssential publishes an essential event.
-func (b *Bus) PublishEssential[T any](topic string, value T) error {
-	return b.Publish(topic, value, Essential())
+func PublishEssential[T any](b *Bus, topic string, value T) error {
+	return Publish[T](b, topic, value, Essential())
 }
 
 // PublishState publishes a state (coalescable) event.
-func (b *Bus) PublishState[T any](topic string, value T) error {
-	return b.Publish(topic, value, State())
+func PublishState[T any](b *Bus, topic string, value T) error {
+	return Publish[T](b, topic, value, State())
 }
 
 // Close closes the bus.
 func (b *Bus) Close() {
 	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return
+	}
 	b.closed = true
 	lists := make([][]*subscription, 0, len(b.subs))
 	for _, l := range b.subs {
@@ -311,9 +325,9 @@ func (b *Bus) removeSubscription(topic string, id uint64) {
 	b.subs[topic] = out
 }
 
-// Handler-based subscription helper.
-func (b *Bus) SubscribeFunc[T any](topic string, handler func(T)) (cancel func()) {
-	ch, cancel := b.Subscribe[T](topic)
+// SubscribeFunc subscribes and invokes handler for each event.
+func SubscribeFunc[T any](b *Bus, topic string, handler func(T)) (cancel func()) {
+	ch, cancel := Subscribe[T](b, topic)
 	go func() {
 		defer func() { _ = recover() }()
 		for v := range ch {
@@ -329,29 +343,47 @@ func (b *Bus) SubscribeFunc[T any](topic string, handler func(T)) (cancel func()
 }
 
 // Package-level helpers using DefaultBus.
-func Publish[T any](topic string, value T, opts ...PublishOption) error {
-	return DefaultBus.Publish(topic, value, opts...)
+
+// PublishDefault publishes to the DefaultBus.
+func PublishDefault[T any](topic string, value T, opts ...PublishOption) error {
+	return Publish[T](DefaultBus, topic, value, opts...)
 }
 
-func Subscribe[T any](topic string) (ch <-chan T, cancel func()) {
-	return DefaultBus.Subscribe[T](topic)
+// SubscribeDefault subscribes to the DefaultBus.
+func SubscribeDefault[T any](topic string) (ch <-chan T, cancel func()) {
+	return Subscribe[T](DefaultBus, topic)
 }
 
-func SubscribeBuffered[T any](topic string, buffer int) (ch <-chan T, cancel func()) {
-	return DefaultBus.SubscribeBuffered[T](topic, buffer)
+// SubscribeBufferedDefault subscribes to the DefaultBus with a buffer size.
+func SubscribeBufferedDefault[T any](topic string, buffer int) (ch <-chan T, cancel func()) {
+	return SubscribeBuffered[T](DefaultBus, topic, buffer)
 }
 
-func PublishEssential[T any](topic string, value T) error {
-	return DefaultBus.PublishEssential(topic, value)
+// PublishEssentialDefault publishes an essential event to the DefaultBus.
+func PublishEssentialDefault[T any](topic string, value T) error {
+	return PublishEssential[T](DefaultBus, topic, value)
 }
 
-func PublishState[T any](topic string, value T) error {
-	return DefaultBus.PublishState(topic, value)
+// PublishStateDefault publishes a state event to the DefaultBus.
+func PublishStateDefault[T any](topic string, value T) error {
+	return PublishState[T](DefaultBus, topic, value)
+}
+
+// Compatibility aliases for DefaultBus.
+
+// Publish publishes to the DefaultBus.
+func PublishToDefault[T any](topic string, value T, opts ...PublishOption) error {
+	return Publish[T](DefaultBus, topic, value, opts...)
+}
+
+// SubscribeToDefault subscribes to the DefaultBus.
+func SubscribeToDefault[T any](topic string) (ch <-chan T, cancel func()) {
+	return Subscribe[T](DefaultBus, topic)
 }
 
 // WaitFor blocks until an event is received or context done.
-func WaitFor[T any](ctx context.Context, topic string) (T, error) {
-	ch, cancel := Subscribe[T](topic)
+func WaitFor[T any](ctx context.Context, b *Bus, topic string) (T, error) {
+	ch, cancel := Subscribe[T](b, topic)
 	defer cancel()
 	select {
 	case v := <-ch:

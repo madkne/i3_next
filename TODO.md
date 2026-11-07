@@ -59,11 +59,11 @@ Code written, tests (unit/integration/e2e) pass in CI, docs updated, `make check
 
 ## 1. Status snapshot
 
-As of 2026-11-07, from a **static review** of the repository (nothing was executed — confirm with `make check`). Current milestone: **M0 — Unbreak**.
+As of 2026-11-07 (executed: `go build ./...` and `go test -race ./...` green; `make check`/CI still blocked by FIX-19). Current milestone: **M0 — Unbreak**.
 
 | Area                   | State          | Evidence                                                                                                                  |
 | ---------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Build                  | ❌ broken      | `eventbus` declares generic methods (illegal in Go) → eventbus, workspace service and their tests do not compile (FIX-17) |
+| Build                  | ✅ (packages)  | `go build ./...` and `go test -race ./...` green (eventbus redesign, FIX-17). `make check`/CI still blocked (FIX-19)      |
 | Format / lint          | ❌             | gofmt-dirty files, empty branch, `go.sum` not in the reviewed snapshot (FIX-19)                                           |
 | e2e / VM tests         | ⚠️ false-green | script exit status ignores failures; some tests run before they are defined (FIX-18)                                      |
 | Daemon `i3-nextd`      | ⚠️ skeleton    | lifecycle, lock, config fallback work; registers no services, no Sway, no API (CORE-30)                                   |
@@ -81,18 +81,17 @@ As of 2026-11-07, from a **static review** of the repository (nothing was execut
 
 Ordered by the rubric in 0.3: first make the repo honest, then deliver the first thing a user can run (login → desktop with a panel), securing the control socket on the way. Re-derive after every merged task.
 
-1. **FIX-17** — event bus compiles again (unblocks the workspace service and most tests)
-2. **FIX-19** — `make check` and CI green: gofmt, `go.sum`, dependency bump, `govulncheck`
-3. **FIX-18** — e2e/VM suite fails when a test fails (and runs every test)
-4. **FIX-20** — stop installing the broken session entry
-5. **FIX-21** — Sway client: no silent failures, no dead client after one timeout
-6. **SWAY-04** — reconnect, resubscribe and rebuild the snapshot after Sway restarts
-7. **CORE-30** — wire the daemon: Sway adapter, workspace service, supervised shell
-8. **API-02** — secure control socket (0600, peer credentials) with `hello` and `status.get`
-9. **OBS-05** — real `i3-nextctl status` talking to the daemon
-10. **SES-02** — minimal real session, proven by the VM login test (SES-09)
-11. **SWAY-24** — generated, validated Sway config; the user's config is never overwritten
-12. **UI-10** — first usable panel: clock + workspaces over the real backend (UI-01, UI-03)
+1. **FIX-19** — `make check` and CI green: gofmt, `go.sum`, dependency bump, `govulncheck`
+2. **FIX-18** — e2e/VM suite fails when a test fails (and runs every test)
+3. **FIX-20** — stop installing the broken session entry
+4. **FIX-21** — Sway client: no silent failures, no dead client after one timeout
+5. **SWAY-04** — reconnect, resubscribe and rebuild the snapshot after Sway restarts
+6. **CORE-30** — wire the daemon: Sway adapter, workspace service, supervised shell
+7. **API-02** — secure control socket (0600, peer credentials) with `hello` and `status.get`
+8. **OBS-05** — real `i3-nextctl status` talking to the daemon
+9. **SES-02** — minimal real session, proven by the VM login test (SES-09)
+10. **SWAY-24** — generated, validated Sway config; the user's config is never overwritten
+11. **UI-10** — first usable panel: clock + workspaces over the real backend (UI-01, UI-03)
 
 Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails closed, FEAT-01 shell self-heal, SVC-04/SVC-06 audio and battery, FEAT-03/FEAT-04 snapshot save/restore.
 
@@ -134,7 +133,6 @@ Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails
 
 **Open**
 
-- [ ] **FIX-17** `P0` `bug` — Event bus does not compile: Go has no methods with type parameters, yet `eventbus` declares `func (b *Bus) Subscribe[T any]`, `Publish[T any]`, `SubscribeFunc[T any]`, … and the workspace service and tests call them. Redesign as package-level generics (`eventbus.Subscribe[T](b, topic)`, `eventbus.Publish(b, topic, v, opts...)`); also fix `cancel` closing `closedCh` twice (panic when `Bus.Close` and a deferred cancel both run) and the possible send-on-closed-channel between the pump goroutine and `close(out)`. ✅ `go build ./... && go test -race ./...` green; goleak clean; CORE-24 load test passes.
 - [ ] **CORE-30** `P0` `feat` — Wire the daemon: `i3-nextd` builds a registry — Sway adapter (with reconnect) → workspace service → optional supervised `quickshell` and `swaybg` — honouring `services.yaml` `enabled` flags, `DependsOn` and required/optional; logs `ServiceStateChanged`. ✅ e2e with headless Sway: `swaymsg workspace number 2` ⇒ `WorkspaceChanged` in the log; `kill -9` of the shell ⇒ restart with backoff, `degraded` after the limit; disabling a service in `services.yaml` is honoured. ⛓ FIX-17, FIX-21, SWAY-04
 - [ ] **FIX-23** `P1` `bug` — Supervisor correctness: `Pdeathsig` is tied to the OS _thread_ that forked the child (needs `runtime.LockOSThread` in the spawning goroutine) so children can be killed spuriously; `p.lastErr` is written without the mutex (data race); `buildEnv` has `|| true` that makes the allowlist a no-op for explicit env; command validation only checks the exec bit (not owner or world-writable); there are no supervisor tests. ✅ tests: crashing child respects the restart limit; process-group kill leaves no orphans; redaction; `-race` clean.
 - [ ] **FIX-24** `P1` `bug` — Bootstrap status: a persisted `last-failure.json` is reloaded on every start and reported forever (never cleared after a healthy start); health polling runs every 10 ms; an informational migration note marks the config load as degraded. ✅ healthy start clears the failure; poll interval 2–5 s; `Degraded` only for real problems.
@@ -144,9 +142,6 @@ Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails
 - [~] **CORE-12** `P1` `feat` — restart policy with backoff and window; tests with an always-crashing child pending (FIX-23).
 - [~] **CORE-13** `P1` `bug` — SIGTERM → grace → SIGKILL on the process group; `Pdeathsig` caveat and the e2e orphan test pending (FIX-23).
 - [~] **CORE-14** `P1` `sec` — env allowlist and redaction implemented; `|| true` bypass and tests pending (FIX-23).
-- [~] **CORE-20** `P1` `feat` — generic `Subscribe[T]` bus: blocked by FIX-17.
-- [~] **CORE-21** `P1` `feat` — backpressure/coalescing policy: implemented, untestable until FIX-17.
-- [~] **CORE-24** `P1` `test` — load test and goleak exist; cannot run until FIX-17.
 
 **Done**
 
@@ -156,8 +151,12 @@ Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails
 - [x] **CORE-04** `P0` `feat` — per-service shutdown timeout, stuck service killed
 - [x] **CORE-06** `P1` `feat` — single instance with PID in the error
 - [x] **CORE-07** `P1` `feat` — last failure kept in state and `last-failure.json`
+- [x] **CORE-20** `P1` `feat` — generic `Subscribe[T]`/`Publish[T]` package-level API
+- [x] **CORE-21** `P1` `feat` — backpressure/coalescing policy (state slot, essential queue-full)
 - [x] **CORE-22** `P0` `feat` — versioned event schemas in `internal/api/events`
 - [x] **CORE-23** `P0` `feat` — immutable versioned snapshots in `internal/core/state`
+- [x] **CORE-24** `P1` `test` — load test (10k events, 100 subs) and goleak clean
+- [x] **FIX-17** `P0` `bug` — event bus compiles: package generics, idempotent cancel/close, pump-owned channel close
 
 ### 3.3 Configuration
 
@@ -527,5 +526,6 @@ Newest first. One line per merged change that moves a task or the status table.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-11-07 | FIX-17 done (eventbus: package generics `Subscribe/Publish[T](b,...)`, idempotent cancel/close, pump-owned out close, workspace service/tests updated); `go build ./... && go test -race ./...` green, goleak clean, CORE-24 load test passes. Unblocked and completed CORE-20/21/24; status snapshot and priority queue refreshed. |
 | 2026-11-07 | Re-baselined after a static review: new structure (sections 0–6) and priority rubric; added FIX-17 … FIX-32; reopened CFG-02/05/06/09/10/12, CORE-05/10…14/20/21/24, SWAY-05/20 as `[~]`; closed SEC-01; added CORE-30, DOC-10, DOC-11 and the FEAT-\* epics from `docs/new_features.md`; added `docs/development/todo-structure.md` |
 | 2026-11-05 | v1 scope frozen in `docs/RELEASE_SCOPE.md`                                                                                                                                                                                                                                                                                           |

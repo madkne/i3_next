@@ -13,7 +13,7 @@ func TestLoad10k100Subs(t *testing.T) {
 	const subs = 100
 	cancels := make([]func(), subs)
 	for i := 0; i < subs; i++ {
-		ch, c := bus.Subscribe[int]("load")
+		ch, c := Subscribe[int](bus, "load")
 		cancels[i] = c
 		go func(ch <-chan int) {
 			for range ch {
@@ -24,7 +24,7 @@ func TestLoad10k100Subs(t *testing.T) {
 	start := time.Now()
 	const n = 10000
 	for i := 0; i < n; i++ {
-		_ = bus.Publish("load", i)
+		_ = Publish(bus, "load", i)
 	}
 	elapsed := time.Since(start)
 	t.Logf("published %d events to %d subs in %v", n, subs, elapsed)

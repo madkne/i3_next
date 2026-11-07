@@ -13,56 +13,65 @@ func TestMain(m *testing.M) {
 
 func TestSubscribeReceive(t *testing.T) {
 	bus := New()
-	ch, cancel := bus.Subscribe[int]("t")
+	ch, cancel := Subscribe[int](bus, "t")
 	defer cancel()
-	if err := bus.Publish("t", 42); err != nil {
+	if err := Publish(bus, "t", 42); err != nil {
 		t.Fatal(err)
 	}
-	if v := <-ch; v != 42 {
-		t.Fatalf("got %d", v)
+	select {
+	case v := <-ch:
+		if v != 42 {
+			t.Fatalf("got %d", v)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
 }
 
 func TestEssentialQueueFull(t *testing.T) {
 	bus := New(WithBufferSize(1))
-	ch, cancel := bus.Subscribe[int]("t")
+	ch, cancel := Subscribe[int](bus, "t")
 	defer cancel()
 	_ = ch
-	if err := bus.Publish("t", 1, Essential()); err != nil {
+	if err := Publish(bus, "t", 1, Essential()); err != nil {
 		t.Fatal(err)
 	}
-	if err := bus.Publish("t", 2, Essential()); err == nil {
+	if err := Publish(bus, "t", 2, Essential()); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
 func TestStateCoalesce(t *testing.T) {
 	bus := New(WithBufferSize(1))
-	ch, cancel := bus.Subscribe[int]("t")
+	ch, cancel := Subscribe[int](bus, "t")
 	defer cancel()
 	for i := 0; i < 5; i++ {
-		if err := bus.PublishState("t", i); err != nil {
+		if err := PublishState(bus, "t", i); err != nil {
 			t.Fatal(err)
 		}
 	}
-	v := <-ch
-	if v != 4 {
-		t.Fatalf("got %d want 4", v)
+	select {
+	case v := <-ch:
+		if v != 4 {
+			t.Fatalf("got %d want 4", v)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
 }
 
 func TestPanicIsolation(t *testing.T) {
 	bus := New()
-	ch, cancel := bus.Subscribe[int]("t")
+	ch, cancel := Subscribe[int](bus, "t")
 	defer cancel()
-	c2 := bus.SubscribeFunc[int]("t", func(v int) {
+	c2 := SubscribeFunc[int](bus, "t", func(v int) {
 		if v == 1 {
 			panic("boom")
 		}
 	})
 	defer c2()
-	_ = bus.Publish("t", 1)
-	_ = bus.Publish("t", 2)
+	_ = Publish(bus, "t", 1)
+	_ = Publish(bus, "t", 2)
 	select {
 	case <-ch:
 	case <-time.After(time.Second):
@@ -70,19 +79,33 @@ func TestPanicIsolation(t *testing.T) {
 }
 
 func TestPackageLevel(t *testing.T) {
-	ch, cancel := Subscribe[int]("pkg")
+	ch, cancel := SubscribeDefault[int]("pkg")
 	defer cancel()
-	if err := Publish("pkg", 7); err != nil {
+	if err := PublishDefault("pkg", 7); err != nil {
 		t.Fatal(err)
 	}
-	if v := <-ch; v != 7 {
-		t.Fatalf("got %d", v)
+	select {
+	case v := <-ch:
+		if v != 7 {
+			t.Fatalf("got %d", v)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
+}
+
+func TestCancelDouble(t *testing.T) {
+	bus := New()
+	_, cancel := Subscribe[int](bus, "d")
+	cancel()
+	cancel() // must not panic
+	bus.Close()
+	bus.Close() // must not panic
 }
 
 func BenchmarkPublish(b *testing.B) {
 	bus := New(WithBufferSize(1024))
-	ch, cancel := bus.Subscribe[int]("b")
+	ch, cancel := Subscribe[int](bus, "b")
 	defer cancel()
 	go func() {
 		for range ch {
@@ -90,6 +113,6 @@ func BenchmarkPublish(b *testing.B) {
 	}()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = bus.Publish("b", i)
+		_ = Publish(bus, "b", i)
 	}
 }

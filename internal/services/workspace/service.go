@@ -114,7 +114,7 @@ func (s *Service) publishWorkspaceEvents(ws []sway.Workspace) {
 			Output:  w.Output,
 			Focused: w.Focused,
 		})
-		_ = s.bus.Publish(string(events.TypeWorkspaceChanged), ev, eventbus.State())
+		_ = eventbus.Publish(s.bus, string(events.TypeWorkspaceChanged), ev, eventbus.State())
 	}
 }
 
@@ -130,7 +130,7 @@ func (s *Service) publishOutputEvents(out []sway.Output) {
 			Scale:     o.Scale,
 			Connected: true,
 		})
-		_ = s.bus.Publish(string(events.TypeOutputChanged), ev, eventbus.State())
+		_ = eventbus.Publish(s.bus, string(events.TypeOutputChanged), ev, eventbus.State())
 	}
 }
 
@@ -144,7 +144,7 @@ func (s *Service) loop(ctx context.Context, ch <-chan sway.Message) {
 			if !ok {
 				if s.bus != nil {
 					ev := events.NewEvent(events.TypeSwayDisconnected, s.name, events.SwayDisconnected{Reason: "channel closed"})
-					_ = s.bus.Publish(string(events.TypeSwayDisconnected), ev)
+					_ = eventbus.Publish(s.bus, string(events.TypeSwayDisconnected), ev)
 				}
 				return
 			}
