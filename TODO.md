@@ -131,8 +131,8 @@
 
 ### 4.1 IPC client
 - [x] **SWAY-01** (P0) Standalone client: find `SWAYSOCK` (fallback to `swaymsg -t get_socket_path` only if needed), clear error if missing. ✅ Standalone `internal/adapters/sway` client: `SocketPath` prefers `SWAYSOCK` and falls back to `swaymsg -t get_socketpath`; returns clear `ErrSocketNotFound` (wraps `ErrUnavailable`) when missing. Unit tests cover env/trim, fallback success, empty/failure output, and missing socket.
-- [ ] **SWAY-02** (P0) i3-ipc protocol: magic `i3-ipc`, header (len, type) in native endianness; framing tested with fuzz (`go test -fuzz`) for partial/huge messages.
-- [ ] **SWAY-03** (P0) Commands (`RUN_COMMAND`), queries (`GET_WORKSPACES/OUTPUTS/TREE/INPUTS/VERSION`), and subscribe (window/workspace/output/mode/shutdown/input).
+- [x] **SWAY-02** (P0) i3-ipc protocol: magic `i3-ipc`, header (len, type) in native endianness; framing tested with fuzz (`go test -fuzz`) for partial/huge messages.
+- [x] **SWAY-03** (P0) Commands (`RUN_COMMAND`), queries (`GET_WORKSPACES/OUTPUTS/TREE/INPUTS/VERSION`), and subscribe (window/workspace/output/mode/shutdown/input).
 - [ ] **SWAY-04** (P0) Reconnect with backoff + resubscribe + full snapshot rebuild after connecting; handle Sway `shutdown` events correctly. ✅ e2e: kill/restart Sway.
 - [ ] **SWAY-05** (P0) Context/timeout for every request; safe concurrency (one reader goroutine, matching replies by message type).
 - [ ] **SWAY-06** (P0) Typed models plus real JSON fixtures from Sway 1.8 and 1.10+ in `internal/adapters/sway/testdata/`. ✅ Parse test that tolerates unknown fields.

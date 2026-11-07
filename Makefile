@@ -82,6 +82,7 @@ install: build
 	@install -d "$(DESTDIR)$(PREFIX)/bin"
 	@install -m 0755 build/i3-nextd build/i3-nextctl build/i3-next-session build/i3-next-doctor "$(DESTDIR)$(PREFIX)/bin/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/sway"
+	@mkdir -p "$(DESTDIR)$(WALLPAPER_DIR)"
 	@install -Dm644 assets/wallpapers/i3-next-default.png $(DESTDIR)$(WALLPAPER_DIR)/i3-next-default.png
 	@install -m 0644 configs/sway/config configs/sway/outputs configs/sway/keybindings configs/sway/window-rules "$(DESTDIR)$(PREFIX)/share/i3-next/sway/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/defaults"

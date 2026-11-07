@@ -58,7 +58,7 @@ sudo apt install -y \
     wayland-protocols \
     dnsmasq-base \
     cloud-image-utils \
-    qemu-system-x86 libvirt-daemon-system virtinst virt-viewer genisoimage 
+    qemu-system-x86 libvirt-daemon-system virtinst virt-viewer genisoimage
 
 sudo usermod -aG libvirt,kvm $USER
 
@@ -69,8 +69,17 @@ sudo usermod -aG libvirt,kvm $USER
 ```bash
 python3 tests/vm/vm.py doctor
 make vm-up
-make vm-test
+make vm-test # Run tests
 make vm-test-clean
+make vm-gui # Restart the graphical VM session
+
+```
+
+when update code and need to restart vm:
+
+```bash
+make vm-sync  # Update the VM with your latest code
+make vm-build # Build inside the VM
 make vm-gui
 ```
 
