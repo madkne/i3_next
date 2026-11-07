@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"sync"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 	"i3_next/internal/api/contracts"
 	"i3_next/internal/core/config"
 	coreerrors "i3_next/internal/core/errors"
+	"i3_next/internal/core/registry"
 	"i3_next/internal/version"
 )
 
@@ -257,7 +259,15 @@ func (a *App) Run(ctx context.Context) error {
 	for i, svc := range services {
 		ok, err := callLifecycle(runCtx, svc, "Start")
 		if err != nil {
-			// Roll back already started services.
+			if !serviceRequired(svc) {
+				// Optional service failed: degrade and continue.
+				a.setDegraded(true)
+				logger.Warn("optional service failed to start",
+					slog.String("service", componentName(svc)),
+					slog.Any("error", err))
+				continue
+			}
+			// Required service failed: roll back already started services.
 			for j := len(started) - 1; j >= 0; j-- {
 				idx := started[j]
 				if rerr := a.stopService(services[idx], a.shutdownTimeout); rerr != nil {
@@ -651,3 +661,73 @@ func topologicalSort(services []any) ([]any, error) {
 	}
 	return result, nil
 }
+
+// ServiceRequired reports whether v is classified as a required service.
+func ServiceRequired(v any) bool {
+	if v == nil {
+		return true
+	}
+	// registry.Service classification.
+	if rs, ok := v.(registry.Service); ok {
+		return registry.IsRequiredService(rs)
+	}
+	// Typed marker interfaces.
+	type requiredMarker interface{ Required() bool }
+	if rm, ok := v.(requiredMarker); ok {
+		return rm.Required()
+	}
+	type optionalMarker interface{ Optional() bool }
+	if om, ok := v.(optionalMarker); ok {
+		return !om.Optional()
+	}
+	type requirementProvider interface{ Requirement() registry.Requirement }
+	if rp, ok := v.(requirementProvider); ok {
+		return rp.Requirement() == registry.Required
+	}
+	type stringRequirementProvider interface{ Requirement() string }
+	if rp, ok := v.(stringRequirementProvider); ok {
+		return rp.Requirement() == "required"
+	}
+
+	// Reflection-based fallback for common method names.
+	rv := reflect.ValueOf(v)
+	if rv.IsValid() {
+		if m := rv.MethodByName("Required"); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
+				return m.Call(nil)[0].Bool()
+			}
+		}
+		if m := rv.MethodByName("Optional"); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
+				return !m.Call(nil)[0].Bool()
+			}
+		}
+		if m := rv.MethodByName("IsRequired"); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
+				return m.Call(nil)[0].Bool()
+			}
+		}
+		if m := rv.MethodByName("IsOptional"); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
+				return !m.Call(nil)[0].Bool()
+			}
+		}
+		if m := rv.MethodByName("Requirement"); m.IsValid() {
+			mt := m.Type()
+			if mt.NumIn() == 0 && mt.NumOut() == 1 {
+				out := m.Call(nil)[0]
+				switch out.Kind() {
+				case reflect.String:
+					return out.String() == "required"
+				}
+			}
+		}
+	}
+	return true
+}
+
+func serviceRequired(v any) bool { return ServiceRequired(v) }

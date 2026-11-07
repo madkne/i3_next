@@ -621,11 +621,11 @@ func IsRequiredService(s Service) bool {
 	if s == nil {
 		return true
 	}
-	if rs, ok := s.(requiredMarker); ok && rs.Required() {
-		return true
+	if rs, ok := s.(requiredMarker); ok {
+		return rs.Required()
 	}
-	if om, ok := s.(optionalMarker); ok && om.Optional() {
-		return false
+	if om, ok := s.(optionalMarker); ok {
+		return !om.Optional()
 	}
 	if rp, ok := s.(requirementProvider); ok {
 		return rp.Requirement() == Required

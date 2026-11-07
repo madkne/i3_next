@@ -86,7 +86,7 @@
   }
   ```
   `Reloader` is optional; services are `required` or `optional` (optional ⟵ degraded). ✅
-- [ ] **CORE-03** (P0) Staged rollback: a required service fails ⟵ stop all services already started; an optional one fails ⟵ `degraded` and continue. ✅ Test with a fake service.
+- [x] **CORE-03** (P0) Staged rollback: a required service fails ⟵ stop all services already started; an optional one fails ⟵ `degraded` and continue. ✅ Test with a fake service.
 - [ ] **CORE-04** (P0) Ordered shutdown with a timeout per service (not only a global one); a stuck service is killed and logged. ✅ Test a hang.
 - [ ] **CORE-05** (P0) Signal tests: SIGTERM/SIGINT/SIGHUP (= reload) and clear exit codes (extend the existing e2e `t_daemon_lifecycle`).
 - [ ] **CORE-06** (P1) Single instance: clear error message plus the PID of the old process; detect stale locks. ⛓ FIX-08
