@@ -405,7 +405,7 @@ def cmd_viewer(_args):
         raise VMError("virt-viewer is not installed")
     if VM_GRAPHICS == "none":
         raise VMError("VM was created without graphics")
-    subprocess.Popen(["virt-viewer", "-c", LIBVIRT_URI, VM_NAME],
+    subprocess.Popen(["virt-viewer","--attach", "-c", LIBVIRT_URI, VM_NAME],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      start_new_session=True)
 

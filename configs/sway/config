@@ -4,4 +4,7 @@ include outputs
 include keybindings
 include window-rules
 
+# i3-next default wallpaper
+output * bg /usr/share/i3-next/wallpapers/i3-next-default.png fill
+
 exec i3-nextd

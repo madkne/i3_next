@@ -2,6 +2,7 @@ APP_NAME := i3_next
 
 PREFIX ?= /usr/local
 DESTDIR ?=
+WALLPAPER_DIR ?= /usr/share/i3-next/wallpapers
 
 BUILD_DIR := build
 
@@ -81,6 +82,7 @@ install: build
 	@install -d "$(DESTDIR)$(PREFIX)/bin"
 	@install -m 0755 build/i3-nextd build/i3-nextctl build/i3-next-session build/i3-next-doctor "$(DESTDIR)$(PREFIX)/bin/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/sway"
+	@install -Dm644 assets/wallpapers/i3-next-default.png $(DESTDIR)$(WALLPAPER_DIR)/i3-next-default.png
 	@install -m 0644 configs/sway/config configs/sway/outputs configs/sway/keybindings configs/sway/window-rules "$(DESTDIR)$(PREFIX)/share/i3-next/sway/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/defaults"
 	@install -m 0644 configs/defaults/* "$(DESTDIR)$(PREFIX)/share/i3-next/defaults/"
@@ -93,3 +95,4 @@ install: build
 	@rm -f "$(DESTDIR)$(PREFIX)/share/doc/i3-next/tmp.md"
 	@install -m 0644 README.md SECURITY.md CONTRIBUTING.md LICENSE "$(DESTDIR)$(PREFIX)/share/doc/i3-next/" 2>/dev/null || true
 	@echo "Installed i3_next to $(DESTDIR)$(PREFIX)"
+
