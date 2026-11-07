@@ -61,19 +61,19 @@ Code written, tests (unit/integration/e2e) pass in CI, docs updated, `make check
 
 As of 2026-11-07 (executed: `go build ./...` and `go test -race ./...` green; `make check`/CI still blocked by FIX-19). Current milestone: **M0 — Unbreak**.
 
-| Area                   | State          | Evidence                                                                                                                  |
-| ---------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Build                  | ✅ (packages)  | `go build ./...` and `go test -race ./...` green (eventbus redesign, FIX-17). `make check`/CI still blocked (FIX-19)      |
-| Format / lint          | ❌             | gofmt-dirty files, empty branch, `go.sum` not in the reviewed snapshot (FIX-19)                                           |
-| e2e / VM tests         | ⚠️ false-green | script exit status ignores failures; some tests run before they are defined (FIX-18)                                      |
-| Daemon `i3-nextd`      | ⚠️ skeleton    | lifecycle, lock, config fallback work; registers no services, no Sway, no API (CORE-30)                                   |
-| CLI `i3-nextctl`       | ⚠️ stub        | `status` prints a fixed string; `config backup/restore` only print (OBS-05, CFG-10)                                       |
-| Sway adapter           | ⚠️             | framing, models, validated commands OK; client can fail silently, no reconnect (FIX-21, SWAY-04)                          |
-| Session                | ❌             | `i3-next-session` is a stub, yet its `.desktop` entry is installed (FIX-20)                                               |
-| Shell (QML)            | ❌             | placeholder rectangles; Quickshell is never started                                                                       |
-| Services / API / D-Bus | ❌             | not started (the workspace service exists but is unwired)                                                                 |
-| Packaging              | ⚠️             | `make install` exists; path drift, no `.deb` (FIX-27, PKG-10)                                                             |
-| Docs                   | ⚠️             | architecture, security, config reference exist; no user guide or troubleshooting                                          |
+| Area                   | State          | Evidence                                                                                                             |
+| ---------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Build                  | ✅ (packages)  | `go build ./...` and `go test -race ./...` green (eventbus redesign, FIX-17). `make check`/CI still blocked (FIX-19) |
+| Format / lint          | ❌             | gofmt-dirty files, empty branch, `go.sum` not in the reviewed snapshot (FIX-19)                                      |
+| e2e / VM tests         | ⚠️ false-green | script exit status ignores failures; some tests run before they are defined (FIX-18)                                 |
+| Daemon `i3-nextd`      | ⚠️ skeleton    | lifecycle, lock, config fallback work; registers no services, no Sway, no API (CORE-30)                              |
+| CLI `i3-nextctl`       | ⚠️ stub        | `status` prints a fixed string; `config backup/restore` only print (OBS-05, CFG-10)                                  |
+| Sway adapter           | ⚠️             | framing, models, validated commands OK; client can fail silently, no reconnect (FIX-21, SWAY-04)                     |
+| Session                | ❌             | `i3-next-session` is a stub, yet its `.desktop` entry is installed (FIX-20)                                          |
+| Shell (QML)            | ❌             | placeholder rectangles; Quickshell is never started                                                                  |
+| Services / API / D-Bus | ❌             | not started (the workspace service exists but is unwired)                                                            |
+| Packaging              | ⚠️             | `make install` exists; path drift, no `.deb` (FIX-27, PKG-10)                                                        |
+| Docs                   | ⚠️             | architecture, security, config reference exist; no user guide or troubleshooting                                     |
 
 ---
 
@@ -110,12 +110,12 @@ Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails
 
 **Done**
 
-- [x] **FIX-00a** `P0` `docs` — `go.mod`, CI, CONTRIBUTING and RELEASE_SCOPE agree on Go 1.24.0
+- [x] **FIX-00a** `P0` `docs` — `go.mod`, CI, CONTRIBUTING and RELEASE_SCOPE agree on Go 1.26.0
 - [x] **FIX-01** `P0` `infra` — default goal is `all`
 - [x] **FIX-02** `P0` `bug` — `lib.sh` lives in `tests/e2e/`
 - [x] **FIX-03** `P0` `bug` — Sway config includes are relative; no binds to missing commands
 - [x] **FIX-04** `P0` `infra` — single `internal/version` package, one `--version` format
-- [x] **FIX-05** `P0` `infra` — Go version decision (1.24.0) applied everywhere
+- [x] **FIX-05** `P0` `infra` — Go version decision (1.26.0) applied everywhere
 - [x] **FIX-07** `P0` `sec` — runtime/state/data/config directories are `0700`
 - [x] **FIX-08** `P0` `sec` — lock file is not deleted on release (see FIX-31)
 - [x] **FIX-09** `P0` `debt` — typed lifecycle interfaces in bootstrap
@@ -526,6 +526,6 @@ Newest first. One line per merged change that moves a task or the status table.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2026-11-07 | FIX-17 done (eventbus: package generics `Subscribe/Publish[T](b,...)`, idempotent cancel/close, pump-owned out close, workspace service/tests updated); `go build ./... && go test -race ./...` green, goleak clean, CORE-24 load test passes. Unblocked and completed CORE-20/21/24; status snapshot and priority queue refreshed. |
+| 2026-11-07 | FIX-17 done (eventbus: package generics `Subscribe/Publish[T](b,...)`, idempotent cancel/close, pump-owned out close, workspace service/tests updated); `go build ./... && go test -race ./...` green, goleak clean, CORE-24 load test passes. Unblocked and completed CORE-20/21/24; status snapshot and priority queue refreshed.  |
 | 2026-11-07 | Re-baselined after a static review: new structure (sections 0–6) and priority rubric; added FIX-17 … FIX-32; reopened CFG-02/05/06/09/10/12, CORE-05/10…14/20/21/24, SWAY-05/20 as `[~]`; closed SEC-01; added CORE-30, DOC-10, DOC-11 and the FEAT-\* epics from `docs/new_features.md`; added `docs/development/todo-structure.md` |
 | 2026-11-05 | v1 scope frozen in `docs/RELEASE_SCOPE.md`                                                                                                                                                                                                                                                                                           |

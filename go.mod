@@ -1,7 +1,7 @@
 module i3_next
 
-// FIX on 1.24.0 (if no have any problems with that)
-go 1.24.0
+// FIX on 1.26.0 (if no have any problems with that)
+go 1.26.0
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0

@@ -101,19 +101,19 @@ Explicitly NOT in v1:
 
 Tier 1 (release-gated, must install and pass release gate on a clean system):
 
-| Distribution | Version | Architecture | Notes |
-|---|---|---|---|
-| Ubuntu LTS | 24.04 (Noble) | amd64 | Primary reference platform |
-| Debian Stable | 13 (Trixie) | amd64 | Primary reference platform |
+| Distribution  | Version       | Architecture | Notes                      |
+| ------------- | ------------- | ------------ | -------------------------- |
+| Ubuntu LTS    | 24.04 (Noble) | amd64        | Primary reference platform |
+| Debian Stable | 13 (Trixie)   | amd64        | Primary reference platform |
 
 Tier 2 (best-effort, not release-gated):
 
-| Distribution | Version | Notes |
-|---|---|---|
-| Ubuntu LTS | 22.04 (Jammy) | Older Sway/Qt; may need backports |
-| Debian Stable | 12 (Bookworm) | Older Sway/Qt; best-effort |
-| Arch Linux | rolling | Community/PKGBUILD, not release-gated |
-| Fedora | current | Best-effort, not tested in CI |
+| Distribution  | Version       | Notes                                 |
+| ------------- | ------------- | ------------------------------------- |
+| Ubuntu LTS    | 22.04 (Jammy) | Older Sway/Qt; may need backports     |
+| Debian Stable | 12 (Bookworm) | Older Sway/Qt; best-effort            |
+| Arch Linux    | rolling       | Community/PKGBUILD, not release-gated |
+| Fedora        | current       | Best-effort, not tested in CI         |
 
 All other distributions are unsupported.
 
@@ -138,16 +138,16 @@ Minimum hardware (x86_64):
 Versions are minimum supported unless stated. "Tested" reflects the versions
 used in development/CI on the Tier 1 platforms.
 
-| Component | Minimum | Recommended | Tested (dev) | Notes |
-|---|---|---|---|---|
-| Go (toolchain) | 1.24.0 | 1.24.0 | 1.24.0 | Pinned by `go.mod`; CI and CONTRIBUTING.md use the same version |
-| Sway | 1.8 | 1.10+ | 1.12 | Feature detection required for version differences |
-| Wayland (protocol/libs) | 1.21 | 1.22+ | 1.26.0 | Compositor/protocol baseline |
-| Quickshell | 0.2 | 0.3+ | 0.3.2 | May require backport/PPA on Tier 1 older releases |
-| Qt / QML | 6.4 | 6.6+ | 6.11.2 | Qt 6 only; Qt 5 unsupported |
-| PipeWire | 0.3 | 1.0+ | distro default | Optional but expected for audio service |
-| NetworkManager | 1.40 | latest | distro default | Optional dependency for network management |
-| D-Bus | session+system bus | - | distro default | Required |
+| Component               | Minimum            | Recommended | Tested (dev)   | Notes                                                           |
+| ----------------------- | ------------------ | ----------- | -------------- | --------------------------------------------------------------- |
+| Go (toolchain)          | 1.26.0             | 1.26.0      | 1.26.0         | Pinned by `go.mod`; CI and CONTRIBUTING.md use the same version |
+| Sway                    | 1.8                | 1.10+       | 1.12           | Feature detection required for version differences              |
+| Wayland (protocol/libs) | 1.21               | 1.22+       | 1.26.0         | Compositor/protocol baseline                                    |
+| Quickshell              | 0.2                | 0.3+        | 0.3.2          | May require backport/PPA on Tier 1 older releases               |
+| Qt / QML                | 6.4                | 6.6+        | 6.11.2         | Qt 6 only; Qt 5 unsupported                                     |
+| PipeWire                | 0.3                | 1.0+        | distro default | Optional but expected for audio service                         |
+| NetworkManager          | 1.40               | latest      | distro default | Optional dependency for network management                      |
+| D-Bus                   | session+system bus | -           | distro default | Required                                                        |
 
 ## 8. Mandatory vs optional dependencies
 
