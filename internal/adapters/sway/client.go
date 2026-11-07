@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net"
 	"sync"
-	"time"
 )
 
 type Client struct {
@@ -17,13 +16,13 @@ type Client struct {
 	writeMu sync.Mutex
 
 	pendingMu sync.Mutex
-	pending   map[MessageType]chan Message
+	pending   map[MessageType][]chan Message
 
-	eventCh chan Message
-	events  []chan Message
+	events []chan Message
 
 	readerDone chan struct{}
 	closed     bool
+	failOnce   sync.Once
 }
 
 func Dial(ctx context.Context, address string) (*Client, error) {
@@ -35,8 +34,7 @@ func Dial(ctx context.Context, address string) (*Client, error) {
 	c := &Client{
 		conn:       conn,
 		frame:      NewConn(conn),
-		pending:    map[MessageType]chan Message{},
-		eventCh:    make(chan Message, 64),
+		pending:    map[MessageType][]chan Message{},
 		readerDone: make(chan struct{}),
 	}
 	go c.reader()
@@ -64,12 +62,17 @@ func (c *Client) reader() {
 			continue
 		}
 		c.pendingMu.Lock()
-		ch, ok := c.pending[m.Type]
-		if ok {
-			delete(c.pending, m.Type)
+		q := c.pending[m.Type]
+		var ch chan Message
+		if len(q) > 0 {
+			ch = q[0]
+			c.pending[m.Type] = q[1:]
+			if len(c.pending[m.Type]) == 0 {
+				delete(c.pending, m.Type)
+			}
 		}
 		c.pendingMu.Unlock()
-		if ok {
+		if ch != nil {
 			select {
 			case ch <- m:
 			default:
@@ -79,33 +82,36 @@ func (c *Client) reader() {
 }
 
 func (c *Client) failAll() {
-	c.pendingMu.Lock()
-	for typ, ch := range c.pending {
-		select {
-		case ch <- Message{}:
-		default:
+	c.failOnce.Do(func() {
+		c.pendingMu.Lock()
+		for _, q := range c.pending {
+			for _, ch := range q {
+				close(ch)
+			}
 		}
-		delete(c.pending, typ)
-	}
-	c.pendingMu.Unlock()
+		c.pending = map[MessageType][]chan Message{}
+		events := c.events
+		c.events = nil
+		c.pendingMu.Unlock()
+		for _, ch := range events {
+			close(ch)
+		}
+	})
 }
 
 func (c *Client) Close() error {
 	c.mu.Lock()
 	c.closed = true
 	c.mu.Unlock()
-	return c.conn.Close()
+	err := c.conn.Close()
+	c.failAll()
+	return err
 }
 
 func (c *Client) Request(ctx context.Context, typ MessageType, payload []byte) (Message, error) {
-	if err := c.setDeadline(ctx); err != nil {
-		return Message{}, err
-	}
-	defer c.clearDeadline()
-
 	ch := make(chan Message, 1)
 	c.pendingMu.Lock()
-	c.pending[typ] = ch
+	c.pending[typ] = append(c.pending[typ], ch)
 	c.pendingMu.Unlock()
 
 	c.writeMu.Lock()
@@ -113,36 +119,61 @@ func (c *Client) Request(ctx context.Context, typ MessageType, payload []byte) (
 	c.writeMu.Unlock()
 	if err != nil {
 		c.pendingMu.Lock()
-		delete(c.pending, typ)
+		// remove ch
+		q := c.pending[typ]
+		for i, x := range q {
+			if x == ch {
+				c.pending[typ] = append(q[:i], q[i+1:]...)
+				break
+			}
+		}
+		if len(c.pending[typ]) == 0 {
+			delete(c.pending, typ)
+		}
 		c.pendingMu.Unlock()
 		return Message{}, err
 	}
 
 	select {
-	case reply := <-ch:
+	case reply, ok := <-ch:
+		if !ok {
+			return Message{}, errors.New("sway: connection closed")
+		}
 		return reply, nil
 	case <-ctx.Done():
 		c.pendingMu.Lock()
-		delete(c.pending, typ)
+		q := c.pending[typ]
+		for i, x := range q {
+			if x == ch {
+				c.pending[typ] = append(q[:i], q[i+1:]...)
+				break
+			}
+		}
+		if len(c.pending[typ]) == 0 {
+			delete(c.pending, typ)
+		}
 		c.pendingMu.Unlock()
 		return Message{}, ctx.Err()
 	}
 }
 
-func (c *Client) setDeadline(ctx context.Context) error {
-	if dl, ok := ctx.Deadline(); ok && !dl.IsZero() {
-		return c.conn.SetDeadline(dl)
-	}
-	return nil
-}
-
-func (c *Client) clearDeadline() {
-	_ = c.conn.SetDeadline(time.Time{})
-}
-
 // convenience methods unchanged
 func (c *Client) RunCommand(ctx context.Context, command string) (Message, error) {
-	return c.Request(ctx, RunCommand, []byte(command))
+	m, err := c.Request(ctx, RunCommand, []byte(command))
+	if err != nil {
+		return Message{}, err
+	}
+	var replies []struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error"`
+	}
+	if err := json.Unmarshal(m.Payload, &replies); err == nil && len(replies) > 0 && !replies[0].Success {
+		if replies[0].Error != "" {
+			return m, errors.New(replies[0].Error)
+		}
+		return m, errors.New("sway: command failed")
+	}
+	return m, nil
 }
 func (c *Client) GetWorkspaces(ctx context.Context) ([]Workspace, error) {
 	reply, err := c.Request(ctx, GetWorkspaces, nil)
