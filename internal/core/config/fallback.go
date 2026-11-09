@@ -162,6 +162,282 @@ func LoadDesktopWithFallback(opts LoadOptions) (LoadReport, error) {
 	return LoadReport{Desktop: cfg, Degraded: len(issues) > 0, Issues: issues, Source: "merged"}, nil
 }
 
+// LoadPluginsWithFallback loads plugins.yaml with fallback to last-valid or defaults.
+func LoadPluginsWithFallback(opts LoadOptions) (PluginsConfig, bool, []LoadIssue, error) {
+	if opts.Layers == nil {
+		opts.Layers = DefaultLayers()
+	}
+	var issues []LoadIssue
+
+	merged := append([]byte(nil), DefaultPlugins...)
+	for _, l := range opts.Layers {
+		if l.Path == "" {
+			continue
+		}
+		p := filepath.Join(l.Path, "plugins.yaml")
+		b, err := os.ReadFile(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: fmt.Errorf("read config: %w", err), Action: "check file permissions"})
+			return fallbackPlugins(issues)
+		}
+		migrated, _, migIssues := migrateIfNeeded("plugins.yaml", p, b, CurrentPluginsVersion)
+		issues = append(issues, migIssues...)
+		if len(migIssues) == 0 || !hasFatalMigrationIssue(migIssues) {
+			b = migrated
+		}
+		if _, err := ParsePlugins(b); err != nil {
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: formatConfigError(p, err), Action: "fix the config file or remove it to use defaults"})
+			return fallbackPlugins(issues)
+		}
+		merged, err = MergeYAML(merged, b)
+		if err != nil {
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: fmt.Errorf("merge config: %w", err), Action: "fix YAML structure"})
+			return fallbackPlugins(issues)
+		}
+	}
+
+	if opts.Env {
+		envOverlay, err := EnvOverlay("plugins.yaml")
+		if err != nil {
+			issues = append(issues, LoadIssue{Layer: "env", Err: err, Action: "check I3NEXT_PLUGINS_* environment variables"})
+			return fallbackPlugins(issues)
+		}
+		if len(envOverlay) > 0 {
+			merged, err = MergeYAML(merged, envOverlay)
+			if err != nil {
+				issues = append(issues, LoadIssue{Layer: "env", Err: err})
+				return fallbackPlugins(issues)
+			}
+		}
+	}
+	if len(opts.Flags) > 0 {
+		flagOverlay, err := FlagsOverlay("plugins.yaml", opts.Flags)
+		if err != nil {
+			issues = append(issues, LoadIssue{Layer: "flags", Err: err, Action: "check command-line config overrides"})
+			return fallbackPlugins(issues)
+		}
+		if len(flagOverlay) > 0 {
+			merged, err = MergeYAML(merged, flagOverlay)
+			if err != nil {
+				issues = append(issues, LoadIssue{Layer: "flags", Err: err})
+				return fallbackPlugins(issues)
+			}
+		}
+	}
+
+	cfg, err := ParsePlugins(merged)
+	if err != nil {
+		issues = append(issues, LoadIssue{File: "plugins.yaml", Layer: "merged", Err: formatConfigError("plugins.yaml", err), Action: "check env/flag overrides and config files"})
+		return fallbackPlugins(issues)
+	}
+
+	_ = saveLastValid("plugins.yaml", merged)
+
+	return cfg, len(issues) > 0, issues, nil
+}
+
+// LoadServicesWithFallback loads services.yaml with fallback to last-valid or defaults.
+func LoadServicesWithFallback(opts LoadOptions) (ServicesConfig, bool, []LoadIssue, error) {
+	if opts.Layers == nil {
+		opts.Layers = DefaultLayers()
+	}
+	var issues []LoadIssue
+
+	merged := append([]byte(nil), DefaultServices...)
+	for _, l := range opts.Layers {
+		if l.Path == "" {
+			continue
+		}
+		p := filepath.Join(l.Path, "services.yaml")
+		b, err := os.ReadFile(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: fmt.Errorf("read config: %w", err), Action: "check file permissions"})
+			return fallbackServices(issues)
+		}
+		migrated, _, migIssues := migrateIfNeeded("services.yaml", p, b, CurrentServicesVersion)
+		issues = append(issues, migIssues...)
+		if len(migIssues) == 0 || !hasFatalMigrationIssue(migIssues) {
+			b = migrated
+		}
+		if _, err := ParseServices(b); err != nil {
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: formatConfigError(p, err), Action: "fix the config file or remove it to use defaults"})
+			return fallbackServices(issues)
+		}
+		merged, err = MergeYAML(merged, b)
+		if err != nil {
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: fmt.Errorf("merge config: %w", err), Action: "fix YAML structure"})
+			return fallbackServices(issues)
+		}
+	}
+
+	if opts.Env {
+		envOverlay, err := EnvOverlay("services.yaml")
+		if err != nil {
+			issues = append(issues, LoadIssue{Layer: "env", Err: err, Action: "check I3NEXT_SERVICES_* environment variables"})
+			return fallbackServices(issues)
+		}
+		if len(envOverlay) > 0 {
+			merged, err = MergeYAML(merged, envOverlay)
+			if err != nil {
+				issues = append(issues, LoadIssue{Layer: "env", Err: err})
+				return fallbackServices(issues)
+			}
+		}
+	}
+	if len(opts.Flags) > 0 {
+		flagOverlay, err := FlagsOverlay("services.yaml", opts.Flags)
+		if err != nil {
+			issues = append(issues, LoadIssue{Layer: "flags", Err: err, Action: "check command-line config overrides"})
+			return fallbackServices(issues)
+		}
+		if len(flagOverlay) > 0 {
+			merged, err = MergeYAML(merged, flagOverlay)
+			if err != nil {
+				issues = append(issues, LoadIssue{Layer: "flags", Err: err})
+				return fallbackServices(issues)
+			}
+		}
+	}
+
+	cfg, err := ParseServices(merged)
+	if err != nil {
+		issues = append(issues, LoadIssue{File: "services.yaml", Layer: "merged", Err: formatConfigError("services.yaml", err), Action: "check env/flag overrides and config files"})
+		return fallbackServices(issues)
+	}
+
+	_ = saveLastValid("services.yaml", merged)
+
+	return cfg, len(issues) > 0, issues, nil
+}
+
+// LoadShortcutsWithFallback loads shortcuts.yaml with fallback to last-valid or defaults.
+func LoadShortcutsWithFallback(opts LoadOptions) (ShortcutsConfig, bool, []LoadIssue, error) {
+	if opts.Layers == nil {
+		opts.Layers = DefaultLayers()
+	}
+	var issues []LoadIssue
+
+	merged := append([]byte(nil), DefaultShortcuts...)
+	for _, l := range opts.Layers {
+		if l.Path == "" {
+			continue
+		}
+		p := filepath.Join(l.Path, "shortcuts.yaml")
+		b, err := os.ReadFile(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: fmt.Errorf("read config: %w", err), Action: "check file permissions"})
+			return fallbackShortcuts(issues)
+		}
+		migrated, _, migIssues := migrateIfNeeded("shortcuts.yaml", p, b, CurrentShortcutsVersion)
+		issues = append(issues, migIssues...)
+		if len(migIssues) == 0 || !hasFatalMigrationIssue(migIssues) {
+			b = migrated
+		}
+		if _, err := ParseShortcuts(b); err != nil {
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: formatConfigError(p, err), Action: "fix the config file or remove it to use defaults"})
+			return fallbackShortcuts(issues)
+		}
+		merged, err = MergeYAML(merged, b)
+		if err != nil {
+			issues = append(issues, LoadIssue{File: p, Layer: l.Name, Err: fmt.Errorf("merge config: %w", err), Action: "fix YAML structure"})
+			return fallbackShortcuts(issues)
+		}
+	}
+
+	if opts.Env {
+		envOverlay, err := EnvOverlay("shortcuts.yaml")
+		if err != nil {
+			issues = append(issues, LoadIssue{Layer: "env", Err: err, Action: "check I3NEXT_SHORTCUTS_* environment variables"})
+			return fallbackShortcuts(issues)
+		}
+		if len(envOverlay) > 0 {
+			merged, err = MergeYAML(merged, envOverlay)
+			if err != nil {
+				issues = append(issues, LoadIssue{Layer: "env", Err: err})
+				return fallbackShortcuts(issues)
+			}
+		}
+	}
+	if len(opts.Flags) > 0 {
+		flagOverlay, err := FlagsOverlay("shortcuts.yaml", opts.Flags)
+		if err != nil {
+			issues = append(issues, LoadIssue{Layer: "flags", Err: err, Action: "check command-line config overrides"})
+			return fallbackShortcuts(issues)
+		}
+		if len(flagOverlay) > 0 {
+			merged, err = MergeYAML(merged, flagOverlay)
+			if err != nil {
+				issues = append(issues, LoadIssue{Layer: "flags", Err: err})
+				return fallbackShortcuts(issues)
+			}
+		}
+	}
+
+	cfg, err := ParseShortcuts(merged)
+	if err != nil {
+		issues = append(issues, LoadIssue{File: "shortcuts.yaml", Layer: "merged", Err: formatConfigError("shortcuts.yaml", err), Action: "check env/flag overrides and config files"})
+		return fallbackShortcuts(issues)
+	}
+
+	_ = saveLastValid("shortcuts.yaml", merged)
+
+	return cfg, len(issues) > 0, issues, nil
+}
+
+func fallbackPlugins(issues []LoadIssue) (PluginsConfig, bool, []LoadIssue, error) {
+	if b, err := loadLastValid("plugins.yaml"); err == nil && len(b) > 0 {
+		if cfg, err := ParsePlugins(b); err == nil {
+			issues = append(issues, LoadIssue{Err: errors.New("using last valid cached config"), Action: "resolve the config error above to use updated settings"})
+			return cfg, true, issues, nil
+		}
+	}
+	cfg, err := ParsePlugins(DefaultPlugins)
+	if err != nil {
+		return PluginsConfig{}, true, issues, fmt.Errorf("internal: embedded default plugins config invalid: %w", err)
+	}
+	issues = append(issues, LoadIssue{Err: errors.New("using embedded default config"), Action: "resolve the config error above"})
+	return cfg, true, issues, nil
+}
+
+func fallbackServices(issues []LoadIssue) (ServicesConfig, bool, []LoadIssue, error) {
+	if b, err := loadLastValid("services.yaml"); err == nil && len(b) > 0 {
+		if cfg, err := ParseServices(b); err == nil {
+			issues = append(issues, LoadIssue{Err: errors.New("using last valid cached config"), Action: "resolve the config error above to use updated settings"})
+			return cfg, true, issues, nil
+		}
+	}
+	cfg, err := ParseServices(DefaultServices)
+	if err != nil {
+		return ServicesConfig{}, true, issues, fmt.Errorf("internal: embedded default services config invalid: %w", err)
+	}
+	issues = append(issues, LoadIssue{Err: errors.New("using embedded default config"), Action: "resolve the config error above"})
+	return cfg, true, issues, nil
+}
+
+func fallbackShortcuts(issues []LoadIssue) (ShortcutsConfig, bool, []LoadIssue, error) {
+	if b, err := loadLastValid("shortcuts.yaml"); err == nil && len(b) > 0 {
+		if cfg, err := ParseShortcuts(b); err == nil {
+			issues = append(issues, LoadIssue{Err: errors.New("using last valid cached config"), Action: "resolve the config error above to use updated settings"})
+			return cfg, true, issues, nil
+		}
+	}
+	cfg, err := ParseShortcuts(DefaultShortcuts)
+	if err != nil {
+		return ShortcutsConfig{}, true, issues, fmt.Errorf("internal: embedded default shortcuts config invalid: %w", err)
+	}
+	issues = append(issues, LoadIssue{Err: errors.New("using embedded default config"), Action: "resolve the config error above"})
+	return cfg, true, issues, nil
+}
+
 func hasFatalMigrationIssue(issues []LoadIssue) bool {
 	for _, is := range issues {
 		if is.Err == nil {

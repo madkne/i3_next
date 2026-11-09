@@ -45,16 +45,6 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Load the service configuration (embedded defaults, config dir, env).
-	merged, err := config.LoadMergedBytes("services.yaml", config.DefaultServices, config.LoadOptions{Env: true})
-	if err != nil {
-		return fmt.Errorf("failed to load services configuration: %w", err)
-	}
-	servicesCfg, err := config.ParseServices(merged)
-	if err != nil {
-		return fmt.Errorf("failed to parse services configuration: %w", err)
-	}
-
 	bus := eventbus.New()
 
 	// Log ServiceStateChanged transitions with detail.
@@ -137,6 +127,28 @@ func run() error {
 		)
 	}
 
+	// Load config with fallback (desktop, plugins, services, shortcuts)
+	opts := []bootstrap.Option{
+		bootstrap.WithConfig(config.LoadOptions{Env: true}),
+	}
+
+	// We need to create the app first to get the config, then add services
+	// But we need the services config to register services...
+	// So we load services config directly with fallback here first
+	servicesCfg, _, servicesIssues, err := config.LoadServicesWithFallback(config.LoadOptions{Env: true})
+	if err != nil {
+		return fmt.Errorf("failed to load services configuration: %w", err)
+	}
+	if len(servicesIssues) > 0 {
+		for _, issue := range servicesIssues {
+			logger.Warn("services config issue",
+				slog.String("file", issue.File),
+				slog.String("layer", issue.Layer),
+				slog.String("error", issue.Err.Error()),
+				slog.String("action", issue.Action))
+		}
+	}
+
 	for name, entry := range servicesCfg.Services {
 		switch name {
 		case "sway":
@@ -154,7 +166,6 @@ func run() error {
 		}
 	}
 
-	opts := []bootstrap.Option{bootstrap.WithConfig(config.LoadOptions{Env: true})}
 	for _, svc := range appServices {
 		opts = append(opts, bootstrap.WithService(svc))
 	}

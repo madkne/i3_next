@@ -24,6 +24,18 @@ func validDesktopYAML(level string) []byte {
 	return []byte("version: 1\nsession:\n  name: i3_next\n  compositor: sway\npaths:\n  config_dir: ~/.config/i3-next\n  data_dir: ~/.local/share/i3-next\n  state_dir: ~/.local/state/i3-next\n  cache_dir: ~/.cache/i3-next\nlogging:\n  level: " + level + "\n  format: text\nui:\n  shell: quickshell\n  theme: default\n")
 }
 
+func validPluginsYAML() []byte {
+	return []byte("version: 1\nplugins:\n  - name: test\n    enabled: true\n")
+}
+
+func validServicesYAML() []byte {
+	return []byte("version: 1\nservices:\n  test: { enabled: true, required: false }\n")
+}
+
+func validShortcutsYAML() []byte {
+	return []byte("version: 1\nshortcuts:\n  - name: test\n    binding: Mod+t\n    command: echo test\n")
+}
+
 func TestLoadDesktopWithFallbackInvalidConfigUsesDefaults(t *testing.T) {
 	configHome, _ := withIsolatedXDG(t)
 	userDir := filepath.Join(configHome, "i3-next")
@@ -122,6 +134,183 @@ func TestLoadDesktopWithFallbackCachesLastValidWith0600(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("last-valid mode=%o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestLoadPluginsWithFallbackInvalidConfigUsesDefaults(t *testing.T) {
+	configHome, _ := withIsolatedXDG(t)
+	userDir := filepath.Join(configHome, "i3-next")
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "plugins.yaml"), []byte("version: 1\nnope: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, issues, err := LoadPluginsWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatalf("unexpected hard error for invalid config: %v", err)
+	}
+	if !degraded {
+		t.Fatal("expected degraded report")
+	}
+	if len(cfg.Plugins) != 1 || cfg.Plugins[0].Name != "example" {
+		t.Fatalf("expected default config loaded, got %+v", cfg)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected issues")
+	}
+}
+
+func TestLoadPluginsWithFallbackInvalidUsesLastValid(t *testing.T) {
+	configHome, _ := withIsolatedXDG(t)
+	userDir := filepath.Join(configHome, "i3-next")
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "plugins.yaml"), validPluginsYAML(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, _, err := LoadPluginsWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if degraded {
+		t.Fatalf("expected healthy load, got degraded: %v", cfg)
+	}
+	if cfg.Plugins[0].Name != "test" {
+		t.Fatalf("expected loaded config, got %+v", cfg)
+	}
+	// Corrupt config
+	if err := os.WriteFile(filepath.Join(userDir, "plugins.yaml"), []byte("::not yaml:: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, _, err = LoadPluginsWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if !degraded {
+		t.Fatal("expected degraded")
+	}
+	if cfg.Plugins[0].Name != "test" {
+		t.Fatalf("expected last-valid config, got %+v", cfg)
+	}
+}
+
+func TestLoadServicesWithFallbackInvalidConfigUsesDefaults(t *testing.T) {
+	configHome, _ := withIsolatedXDG(t)
+	userDir := filepath.Join(configHome, "i3-next")
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "services.yaml"), []byte("version: 1\nnope: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, issues, err := LoadServicesWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatalf("unexpected hard error for invalid config: %v", err)
+	}
+	if !degraded {
+		t.Fatal("expected degraded report")
+	}
+	if len(cfg.Services) != 14 {
+		t.Fatalf("expected default services loaded, got %d", len(cfg.Services))
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected issues")
+	}
+}
+
+func TestLoadServicesWithFallbackInvalidUsesLastValid(t *testing.T) {
+	configHome, _ := withIsolatedXDG(t)
+	userDir := filepath.Join(configHome, "i3-next")
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "services.yaml"), validServicesYAML(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, _, err := LoadServicesWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if degraded {
+		t.Fatalf("expected healthy load, got degraded: %v", cfg)
+	}
+	if _, ok := cfg.Services["test"]; !ok {
+		t.Fatalf("expected loaded config with test service, got %+v", cfg)
+	}
+	// Corrupt config
+	if err := os.WriteFile(filepath.Join(userDir, "services.yaml"), []byte("::not yaml:: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, _, err = LoadServicesWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if !degraded {
+		t.Fatal("expected degraded")
+	}
+	if _, ok := cfg.Services["test"]; !ok {
+		t.Fatalf("expected last-valid config with test service, got %+v", cfg)
+	}
+}
+
+func TestLoadShortcutsWithFallbackInvalidConfigUsesDefaults(t *testing.T) {
+	configHome, _ := withIsolatedXDG(t)
+	userDir := filepath.Join(configHome, "i3-next")
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "shortcuts.yaml"), []byte("version: 1\nnope: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, issues, err := LoadShortcutsWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatalf("unexpected hard error for invalid config: %v", err)
+	}
+	if !degraded {
+		t.Fatal("expected degraded report")
+	}
+	if len(cfg.Shortcuts) != 3 {
+		t.Fatalf("expected default shortcuts loaded, got %d", len(cfg.Shortcuts))
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected issues")
+	}
+}
+
+func TestLoadShortcutsWithFallbackInvalidUsesLastValid(t *testing.T) {
+	configHome, _ := withIsolatedXDG(t)
+	userDir := filepath.Join(configHome, "i3-next")
+	if err := os.MkdirAll(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "shortcuts.yaml"), validShortcutsYAML(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, _, err := LoadShortcutsWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if degraded {
+		t.Fatalf("expected healthy load, got degraded: %v", cfg)
+	}
+	if len(cfg.Shortcuts) != 1 || cfg.Shortcuts[0].Name != "test" {
+		t.Fatalf("expected loaded config, got %+v", cfg)
+	}
+	// Corrupt config
+	if err := os.WriteFile(filepath.Join(userDir, "shortcuts.yaml"), []byte("::not yaml:: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, degraded, _, err = LoadShortcutsWithFallback(LoadOptions{})
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if !degraded {
+		t.Fatal("expected degraded")
+	}
+	if len(cfg.Shortcuts) != 1 || cfg.Shortcuts[0].Name != "test" {
+		t.Fatalf("expected last-valid config, got %+v", cfg)
 	}
 }
 
