@@ -8,7 +8,7 @@ Upstream project license: MIT.
 Copyright (c) 2026 Samuel Berthe.
 
 These repository-specific skill files are rewritten and tailored to the i3_next
-architecture, Go 1.24 baseline, build/test workflow and the host-Sway safety rule.
+architecture, the Go version declared in `go.mod`, build/test workflow and the host-Sway safety rule.
 They are not byte-for-byte copies of upstream skill files.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of

@@ -11,7 +11,7 @@ source: https://github.com/samber/cc-skills-golang
 
 ## Decision criteria
 1. Does the standard library already solve the problem?
-2. Is the dependency actively maintained and compatible with Go 1.24?
+2. Is the dependency actively maintained and compatible with the Go version in `go.mod`?
 3. Is its license compatible with this MIT-licensed project?
 4. What are its transitive dependencies, binary-size impact and attack surface?
 5. Does it fit Linux/Wayland packaging and the supported distributions?

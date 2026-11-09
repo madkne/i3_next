@@ -11,7 +11,7 @@ source: https://github.com/samber/cc-skills-golang
 
 ## Project baseline
 
-The module is `i3_next` and `go.mod` currently declares Go 1.26.0. Read the current module file and dependency policy before making changes.
+The module is `i3_next`. `go.mod` declares the project's Go version; read the current module file and dependency policy before making changes.
 
 ## Rules
 

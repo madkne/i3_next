@@ -11,7 +11,7 @@ source: https://github.com/samber/cc-skills-golang
 
 ## Compatibility rule
 
-The repository currently targets Go 1.26.3. Use only APIs available at that minimum unless the project deliberately raises its minimum version after checking CI, packaging and target distributions. Never copy examples requiring Go 1.25/1.26 without checking availability.
+The repository targets the Go version declared in `go.mod`. Use only APIs available at that minimum unless the project deliberately raises its minimum version after checking CI, packaging and target distributions. Never copy examples requiring a newer Go version without checking availability.
 
 ## Candidates
 

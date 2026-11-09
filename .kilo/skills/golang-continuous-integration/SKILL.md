@@ -26,7 +26,7 @@ Use the repository's existing `make check` and CI workflow as the source of trut
 
 - Pin GitHub Actions to stable major versions or immutable SHAs according to repository policy.
 - Set least-privilege `permissions` per job.
-- Use Go version from `go.mod` (currently Go 1.26.3); avoid testing unsupported toolchains accidentally.
+- Use Go version from `go.mod`; avoid testing unsupported toolchains accidentally.
 - Cache Go modules/build artifacts safely; do not cache generated secrets or mutable release outputs.
 - Run independent checks in parallel, but preserve actionable logs and avoid hiding failures behind `continue-on-error`.
 - Use `-count=1` for integration tests when cached results would invalidate the check.
