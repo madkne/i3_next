@@ -98,6 +98,10 @@ func TestClientRequestReply(t *testing.T) {
 }
 
 func TestClientGetOutputsTreeInputs(t *testing.T) {
+	// Test that we can send requests with the correct message types
+	// and receive responses. The fake server uses the same message types
+	// as the client (internal constants), which is fine for this test
+	// since we're testing the client's Request logic, not the wire protocol.
 	s := newFakeServer(t, func(conn net.Conn) {
 		c := NewConn(conn)
 		for {
@@ -134,6 +138,8 @@ func TestClientGetOutputsTreeInputs(t *testing.T) {
 }
 
 func TestClientSubscribe(t *testing.T) {
+	// Test that Subscribe works and we receive events with correct types.
+	// The fake server sends events with internal event type constants.
 	s := newFakeServer(t, func(conn net.Conn) {
 		c := NewConn(conn)
 		m, err := c.ReadMessage()

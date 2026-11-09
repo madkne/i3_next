@@ -195,46 +195,7 @@ func (c *Client) GetOutputs(ctx context.Context) ([]Output, error) {
 	if err != nil {
 		return nil, err
 	}
-	// sway's get_outputs IPC may report {"success": false}; fall back to the
-	// output nodes reported by get_tree, which carries all output fields.
-	var succ struct {
-		Success bool `json:"success"`
-	}
-	if json.Unmarshal(reply.Payload, &succ) == nil && !succ.Success {
-		return outputsFromTree(c, ctx)
-	}
 	return UnmarshalOutputs(reply.Payload)
-}
-
-func outputsFromTree(c *Client, ctx context.Context) ([]Output, error) {
-	reply, err := c.Request(ctx, GetTree, nil)
-	if err != nil {
-		return nil, err
-	}
-	var nodes []Node
-	if err := json.Unmarshal(reply.Payload, &nodes); err != nil {
-		return nil, err
-	}
-	var outs []Output
-	for i := range nodes {
-		if nodes[i].Type != "output" {
-			continue
-		}
-		n := &nodes[i]
-		outs = append(outs, Output{
-			ID:               n.ID,
-			Name:             n.Name,
-			Active:           n.Active,
-			CurrentWorkspace: n.CurrentWorkspace,
-			Rect:             n.Rect,
-			Scale:            n.Scale,
-			Transform:        n.Transform,
-			Make:             n.Make,
-			Model:            n.Model,
-			Serial:           n.Serial,
-		})
-	}
-	return outs, nil
 }
 
 func (c *Client) GetTree(ctx context.Context) (*Node, error) {

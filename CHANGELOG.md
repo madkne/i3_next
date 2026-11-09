@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `configs/defaults/`, a stale duplicate of the embedded defaults (FIX-32)
 
 ### Fixed
+- Sway IPC message types and event types now match `sway-ipc(7)` specification: `Subscribe=2`, `GetOutputs=3`, `GetTree=4`, `GetVersion=7`, `GetInputs=100`, and events `workspace=0`, `output=1`, `mode=2`, `window=3`, `shutdown=6`, `input=21`; the incorrect `outputsFromTree` fallback was removed; table tests pin the constants against the man page (FIX-33)
 - Bump the minimum Go toolchain to 1.26.3 so CI uses standard-library security fixes required by `govulncheck`.
 
 ### Security
