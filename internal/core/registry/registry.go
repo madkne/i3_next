@@ -33,20 +33,6 @@ const (
 	Optional Requirement = "optional"
 )
 
-// Aliases for the requirement type.
-type (
-	ServiceRequirement = Requirement
-	ServiceKind        = Requirement
-	ServiceLevel       = Requirement
-	ServiceCriticality = Requirement
-	ServicePriority    = Requirement
-)
-
-const (
-	ServiceRequired = Required
-	ServiceOptional = Optional
-)
-
 // Entry describes a registered service.
 type Entry struct {
 	Name        string
@@ -55,16 +41,6 @@ type Entry struct {
 	Optional    bool
 	Requirement Requirement
 }
-
-// Aliases for the entry type.
-type (
-	ServiceEntry        = Entry
-	Registration        = Entry
-	ServiceRegistration = Entry
-	RegisteredService   = Entry
-	ServiceDescriptor   = Entry
-	ServiceSpec         = Entry
-)
 
 // Registry holds registered services.
 type Registry struct {
@@ -78,14 +54,8 @@ func New() *Registry {
 	return &Registry{entries: make(map[string]Entry)}
 }
 
-// NewRegistry is an alias for New.
-func NewRegistry() *Registry { return New() }
-
 // DefaultRegistry is a package-level registry.
 var DefaultRegistry = New()
-
-// Default is an alias for DefaultRegistry.
-var Default = DefaultRegistry
 
 // marker interfaces (unexported) for classifying services.
 type requiredMarker interface{ Required() bool }
@@ -162,167 +132,60 @@ func WrapRequired(s Service) Service { return RequiredService{Service: s} }
 // WrapOptional wraps a service as optional.
 func WrapOptional(s Service) Service { return OptionalService{Service: s} }
 
-// AsRequired / AsOptional aliases.
-func AsRequired(s Service) Service { return WrapRequired(s) }
-func AsOptional(s Service) Service { return WrapOptional(s) }
+// RegisterOption configures a single registration.
+type RegisterOption func(*registerOptions)
 
-// registerArgs holds parsed registration arguments.
-type registerArgs struct {
-	svc      Service
-	name     string
-	required bool
-	optional bool
-	req      Requirement
-	hasSvc   bool
-	hasClass bool
+type registerOptions struct {
+	name   string
+	req    Requirement
+	hasReq bool
 }
 
-// parseRegisterArgs extracts service/name/classification from variadic args.
-func parseRegisterArgs(args []any) registerArgs {
-	ra := registerArgs{required: true}
-	for _, a := range args {
-		switch v := a.(type) {
-		case Service:
-			if ra.hasSvc {
-				continue
-			}
-			ra.svc = v
-			ra.hasSvc = true
-			if ra.name == "" {
-				ra.name = v.Name()
-			}
-		case string:
-			switch v {
-			case "required":
-				ra.required = true
-				ra.optional = false
-				ra.req = Required
-				ra.hasClass = true
-			case "optional":
-				ra.required = false
-				ra.optional = true
-				ra.req = Optional
-				ra.hasClass = true
-			default:
-				ra.name = v
-			}
-		case bool:
-			ra.required = v
-			ra.optional = !v
-			if v {
-				ra.req = Required
-			} else {
-				ra.req = Optional
-			}
-			ra.hasClass = true
-		case Requirement:
-			ra.req = v
-			ra.required = v == Required
-			ra.optional = v == Optional
-			ra.hasClass = true
-		case int:
-			switch v {
-			case 1:
-				ra.required = true
-				ra.optional = false
-				ra.req = Required
-				ra.hasClass = true
-			case 0:
-				ra.required = false
-				ra.optional = true
-				ra.req = Optional
-				ra.hasClass = true
-			}
-		default:
-			if rm, ok := a.(requiredMarker); ok && rm.Required() {
-				ra.required = true
-				ra.optional = false
-				ra.req = Required
-				ra.hasClass = true
-			} else if om, ok := a.(optionalMarker); ok && om.Optional() {
-				ra.required = false
-				ra.optional = true
-				ra.req = Optional
-				ra.hasClass = true
-			} else if rp, ok := a.(requirementProvider); ok {
-				r := rp.Requirement()
-				ra.req = r
-				ra.required = r == Required
-				ra.optional = r == Optional
-				ra.hasClass = true
-			}
-		}
-	}
-	return ra
+// Name assigns the service a registration name (defaults to Service.Name()).
+func Name(n string) RegisterOption {
+	return func(o *registerOptions) { o.name = n }
 }
 
-func hasExplicitClassification(args []any) bool {
-	for _, a := range args {
-		switch v := a.(type) {
-		case bool, Requirement, int:
-			return true
-		case string:
-			if v == "required" || v == "optional" {
-				return true
-			}
-		default:
-			if _, ok := a.(requiredMarker); ok {
-				return true
-			}
-			if _, ok := a.(optionalMarker); ok {
-				return true
-			}
-			if _, ok := a.(requirementProvider); ok {
-				return true
-			}
-		}
-	}
-	return false
+// WithRequirement sets the service's required/optional classification.
+func WithRequirement(r Requirement) RegisterOption {
+	return func(o *registerOptions) { o.req = r; o.hasReq = true }
 }
 
 // Register adds a service to the registry.
-func (r *Registry) Register(args ...any) error {
+func (r *Registry) Register(s Service, opts ...RegisterOption) error {
 	if r == nil {
 		return errors.New("nil registry")
 	}
-	ra := parseRegisterArgs(args)
-	svc := ra.svc
-	name := ra.name
-	required := ra.required
-	optional := ra.optional
-	req := ra.req
-	hasSvc := ra.hasSvc
-	if !hasSvc {
-		return fmt.Errorf("%w: missing service", ErrInvalidArgument)
+	if s == nil {
+		return fmt.Errorf("%w: nil service", ErrInvalidArgument)
 	}
+	o := registerOptions{req: Required}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&o)
+		}
+	}
+	name := o.name
 	if name == "" {
-		name = svc.Name()
+		name = s.Name()
 	}
 	if name == "" {
 		return fmt.Errorf("%w: empty service name", ErrInvalidArgument)
 	}
+	required := o.req == Required
+	optional := !required
+	req := o.req
 
-	// infer classification if not explicitly given
-	if !hasExplicitClassification(args) {
-		if rp, ok := svc.(requirementProvider); ok {
+	if !o.hasReq {
+		// Infer classification from the service itself.
+		if rm, ok := s.(requiredMarker); ok && rm.Required() {
+			required, optional, req = true, false, Required
+		} else if om, ok := s.(optionalMarker); ok && om.Optional() {
+			required, optional, req = false, true, Optional
+		} else if rp, ok := s.(requirementProvider); ok {
 			req = rp.Requirement()
 			required = req == Required
 			optional = req == Optional
-		} else if rm, ok := svc.(requiredMarker); ok && rm.Required() {
-			required = true
-			optional = false
-			req = Required
-		} else if om, ok := svc.(optionalMarker); ok && om.Optional() {
-			required = false
-			optional = true
-			req = Optional
-		}
-	}
-	if req == "" {
-		if required {
-			req = Required
-		} else {
-			req = Optional
 		}
 	}
 	if required {
@@ -330,6 +193,13 @@ func (r *Registry) Register(args ...any) error {
 	}
 	if optional {
 		required = false
+	}
+	if req == "" {
+		if required {
+			req = Required
+		} else {
+			req = Optional
+		}
 	}
 
 	r.mu.Lock()
@@ -342,7 +212,7 @@ func (r *Registry) Register(args ...any) error {
 	}
 	entry := Entry{
 		Name:        name,
-		Service:     svc,
+		Service:     s,
 		Required:    required,
 		Optional:    optional,
 		Requirement: req,
@@ -354,29 +224,17 @@ func (r *Registry) Register(args ...any) error {
 
 // RegisterRequired registers a required service.
 func (r *Registry) RegisterRequired(s Service) error {
-	return r.Register(s, Required)
+	return r.Register(s, WithRequirement(Required))
 }
 
 // RegisterOptional registers an optional service.
 func (r *Registry) RegisterOptional(s Service) error {
-	return r.Register(s, Optional)
+	return r.Register(s, WithRequirement(Optional))
 }
 
-// RegisterService alias.
-func (r *Registry) RegisterService(args ...any) error { return r.Register(args...) }
-
-// Add alias.
-func (r *Registry) Add(args ...any) error { return r.Register(args...) }
-
-// AddRequired alias.
-func (r *Registry) AddRequired(s Service) error { return r.RegisterRequired(s) }
-
-// AddOptional alias.
-func (r *Registry) AddOptional(s Service) error { return r.RegisterOptional(s) }
-
 // MustRegister registers or panics.
-func (r *Registry) MustRegister(args ...any) {
-	if err := r.Register(args...); err != nil {
+func (r *Registry) MustRegister(s Service, opts ...RegisterOption) {
+	if err := r.Register(s, opts...); err != nil {
 		panic(err)
 	}
 }
@@ -392,15 +250,6 @@ func (r *Registry) Get(name string) (Service, bool) {
 	return e.Service, true
 }
 
-// Lookup alias.
-func (r *Registry) Lookup(name string) (Service, bool) { return r.Get(name) }
-
-// Service method alias.
-func (r *Registry) Service(name string) (Service, bool) { return r.Get(name) }
-
-// Find alias.
-func (r *Registry) Find(name string) (Service, bool) { return r.Get(name) }
-
 // Entry returns the full entry.
 func (r *Registry) Entry(name string) (Entry, bool) {
 	r.mu.RLock()
@@ -408,12 +257,6 @@ func (r *Registry) Entry(name string) (Entry, bool) {
 	e, ok := r.entries[name]
 	return e, ok
 }
-
-// GetEntry alias.
-func (r *Registry) GetEntry(name string) (Entry, bool) { return r.Entry(name) }
-
-// LookupEntry alias.
-func (r *Registry) LookupEntry(name string) (Entry, bool) { return r.Entry(name) }
 
 // Services returns all services in registration order.
 func (r *Registry) Services() []Service {
@@ -428,12 +271,6 @@ func (r *Registry) Services() []Service {
 	return out
 }
 
-// All alias.
-func (r *Registry) All() []Service { return r.Services() }
-
-// List alias.
-func (r *Registry) List() []Service { return r.Services() }
-
 // Entries returns all entries.
 func (r *Registry) Entries() []Entry {
 	r.mu.RLock()
@@ -446,9 +283,6 @@ func (r *Registry) Entries() []Entry {
 	}
 	return out
 }
-
-// Registrations alias.
-func (r *Registry) Registrations() []Entry { return r.Entries() }
 
 // Required returns required services.
 func (r *Registry) Required() []Service {
@@ -463,9 +297,6 @@ func (r *Registry) Required() []Service {
 	return out
 }
 
-// RequiredServices method alias.
-func (r *Registry) RequiredServices() []Service { return r.Required() }
-
 // Optional returns optional services.
 func (r *Registry) Optional() []Service {
 	r.mu.RLock()
@@ -478,9 +309,6 @@ func (r *Registry) Optional() []Service {
 	}
 	return out
 }
-
-// OptionalServices method alias.
-func (r *Registry) OptionalServices() []Service { return r.Optional() }
 
 // IsRequired reports whether a named service is required.
 func (r *Registry) IsRequired(name string) bool {
@@ -517,24 +345,12 @@ func (r *Registry) Has(name string) bool {
 	return ok
 }
 
-// Contains alias.
-func (r *Registry) Contains(name string) bool { return r.Has(name) }
-
-// HasService alias.
-func (r *Registry) HasService(name string) bool { return r.Has(name) }
-
 // Len returns the number of registered services.
 func (r *Registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.entries)
 }
-
-// Count alias.
-func (r *Registry) Count() int { return r.Len() }
-
-// Size alias.
-func (r *Registry) Size() int { return r.Len() }
 
 // Unregister removes a service.
 func (r *Registry) Unregister(name string) error {
@@ -553,12 +369,6 @@ func (r *Registry) Unregister(name string) error {
 	return nil
 }
 
-// Remove alias.
-func (r *Registry) Remove(name string) error { return r.Unregister(name) }
-
-// Delete alias.
-func (r *Registry) Delete(name string) error { return r.Unregister(name) }
-
 // Clear removes all services.
 func (r *Registry) Clear() {
 	r.mu.Lock()
@@ -566,9 +376,6 @@ func (r *Registry) Clear() {
 	r.entries = make(map[string]Entry)
 	r.order = nil
 }
-
-// Reset alias.
-func (r *Registry) Reset() { r.Clear() }
 
 // Range iterates over services.
 func (r *Registry) Range(fn func(name string, s Service, required bool) bool) {
@@ -585,14 +392,6 @@ func (r *Registry) Range(fn func(name string, s Service, required bool) bool) {
 	}
 }
 
-// ForEach alias.
-func (r *Registry) ForEach(fn func(name string, s Service)) {
-	r.Range(func(name string, s Service, required bool) bool {
-		fn(name, s)
-		return true
-	})
-}
-
 // Names returns registered names.
 func (r *Registry) Names() []string {
 	r.mu.RLock()
@@ -601,20 +400,6 @@ func (r *Registry) Names() []string {
 	copy(out, r.order)
 	return out
 }
-
-// Package-level helpers operating on DefaultRegistry.
-func Register(args ...any) error        { return DefaultRegistry.Register(args...) }
-func RegisterRequired(s Service) error  { return DefaultRegistry.RegisterRequired(s) }
-func RegisterOptional(s Service) error  { return DefaultRegistry.RegisterOptional(s) }
-func RegisterService(args ...any) error { return DefaultRegistry.Register(args...) }
-func Get(name string) (Service, bool)   { return DefaultRegistry.Get(name) }
-func Services() []Service               { return DefaultRegistry.Services() }
-func RequiredServices() []Service       { return DefaultRegistry.Required() }
-func OptionalServices() []Service       { return DefaultRegistry.Optional() }
-func Unregister(name string) error      { return DefaultRegistry.Unregister(name) }
-func Has(name string) bool              { return DefaultRegistry.Has(name) }
-func Len() int                          { return DefaultRegistry.Len() }
-func Clear()                            { DefaultRegistry.Clear() }
 
 // IsRequiredService reports whether a service is required based on markers/wrappers.
 func IsRequiredService(s Service) bool {
@@ -647,10 +432,4 @@ var (
 	ErrInvalidArgument   = errors.New("invalid argument")
 	ErrNotFound          = errors.New("not found")
 	ErrAlreadyRegistered = errors.New("already registered")
-)
-
-// Aliases for common error vars.
-var (
-	ErrDuplicate     = ErrAlreadyRegistered
-	ErrAlreadyExists = ErrAlreadyRegistered
 )

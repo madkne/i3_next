@@ -90,7 +90,7 @@ install: build
 	@install -Dm644 assets/wallpapers/i3-next-default.png $(DESTDIR)$(WALLPAPER_DIR)/i3-next-default.png
 	@install -m 0644 configs/sway/config configs/sway/outputs configs/sway/keybindings configs/sway/window-rules "$(DESTDIR)$(PREFIX)/share/i3-next/sway/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/defaults"
-	@install -m 0644 configs/defaults/* "$(DESTDIR)$(PREFIX)/share/i3-next/defaults/"
+	@install -m 0644 internal/core/config/defaults/* "$(DESTDIR)$(PREFIX)/share/i3-next/defaults/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/i3-next/quickshell"
 	@cp -a ui/quickshell/. "$(DESTDIR)$(PREFIX)/share/i3-next/quickshell/"
 	@install -d "$(DESTDIR)$(PREFIX)/share/wayland-sessions"

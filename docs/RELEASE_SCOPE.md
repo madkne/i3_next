@@ -2,7 +2,6 @@
 
 Status: Final v1.0 (scope frozen)
 Target version: 1.0.0
-Last updated: 2026-11-05
 
 ## 1. Purpose
 

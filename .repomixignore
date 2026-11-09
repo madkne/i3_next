@@ -2,3 +2,4 @@
 deployments/data
 *.svg
 *.png
+tests/vm/.state

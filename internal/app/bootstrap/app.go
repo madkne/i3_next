@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +38,17 @@ type Reloader interface {
 	Reload(ctx context.Context) error
 }
 
+// ShutdownTimeouter declares a per-service shutdown timeout, overriding the
+// daemon-wide default.
+type ShutdownTimeouter interface {
+	ShutdownTimeout() time.Duration
+}
+
+// Killer attempts a best-effort kill of a stuck service.
+type Killer interface {
+	Kill(ctx context.Context) error
+}
+
 type Named interface {
 	Name() string
 }
@@ -47,12 +57,6 @@ type Named interface {
 type Depender interface {
 	DependsOn() []string
 }
-
-// Aliases for the dependency interface.
-type Dependent = Depender
-type DependencyProvider = Depender
-type Dependencies = Depender
-type DependsOnProvider = Depender
 
 // Services may alternatively declare dependencies via these methods.
 type DependenciesProvider interface {
@@ -473,7 +477,7 @@ func (a *App) Run(ctx context.Context) error {
 	for i, svc := range services {
 		ok, err := callLifecycle(runCtx, svc, "Start")
 		if err != nil {
-			if !serviceRequired(svc) {
+			if !ServiceRequired(svc) {
 				// Optional service failed: degrade and continue.
 				a.setDegraded(true)
 				logger.Warn("optional service failed to start",
@@ -609,7 +613,7 @@ func (a *App) checkHealth(ctx context.Context, services []any, cancel context.Ca
 			a.setDegraded(true)
 			// A required service failure is fatal; an optional service
 			// failure degrades the daemon but keeps it running.
-			if !serviceRequired(svc) {
+			if !ServiceRequired(svc) {
 				logger.Warn("optional service failed; degrading",
 					slog.String("service", name))
 				continue
@@ -641,7 +645,12 @@ func (a *App) stopService(svc any, defaultTimeout time.Duration) error {
 	}
 	// A service may declare its own shutdown timeout, overriding the
 	// (global) default passed in.
-	timeout := serviceShutdownTimeout(svc, defaultTimeout)
+	timeout := defaultTimeout
+	if st, ok := svc.(ShutdownTimeouter); ok {
+		if d := st.ShutdownTimeout(); d > 0 {
+			timeout = d
+		}
+	}
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
@@ -670,7 +679,11 @@ func (a *App) stopService(svc any, defaultTimeout time.Duration) error {
 		return r.err
 	case <-ctx.Done():
 		// Best-effort: try to kill a stuck service if it supports it.
-		killService(svc, a.logger)
+		if k, ok := svc.(Killer); ok {
+			killCtx, killCancel := context.WithTimeout(context.Background(), time.Second)
+			_ = k.Kill(killCtx)
+			killCancel()
+		}
 		a.logger.Error("service stop timed out; killed",
 			slog.String("service", componentName(svc)),
 			slog.Duration("timeout", timeout))
@@ -842,113 +855,6 @@ func callLifecycle(ctx context.Context, v any, name string) (bool, error) {
 	return false, nil
 }
 
-// unwrapService returns the underlying service if svc is a known wrapper.
-func unwrapService(v any) any {
-	for {
-		switch w := v.(type) {
-		case registry.RequiredService:
-			v = w.Service
-		case *registry.RequiredService:
-			if w != nil {
-				v = w.Service
-				continue
-			}
-			return v
-		case registry.OptionalService:
-			v = w.Service
-		case *registry.OptionalService:
-			if w != nil {
-				v = w.Service
-				continue
-			}
-			return v
-		default:
-			return v
-		}
-	}
-}
-
-var shutdownTimeoutMethodNames = []string{
-	"ShutdownTimeout",
-	"StopTimeout",
-	"ShutdownGrace",
-	"GracePeriod",
-	"StopDeadline",
-	"ShutdownDeadline",
-	"Timeout",
-}
-
-var shutdownTimeoutFieldNames = []string{
-	"ShutdownTimeout",
-	"StopTimeout",
-	"GracePeriod",
-	"Timeout",
-}
-
-// serviceShutdownTimeout resolves a per-service shutdown timeout, if the
-// service declares one; otherwise fallback is returned.
-func serviceShutdownTimeout(v any, fallback time.Duration) time.Duration {
-	v = unwrapService(v)
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
-		rv = rv.Elem()
-		// keep original for method calls on pointer
-	}
-	orig := reflect.ValueOf(unwrapService(v))
-
-	// Methods.
-	for _, name := range shutdownTimeoutMethodNames {
-		if m := orig.MethodByName(name); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0) == reflect.TypeOf(time.Duration(0)) {
-				if d := time.Duration(m.Call(nil)[0].Int()); d > 0 {
-					return d
-				}
-			}
-		}
-	}
-	// Fields (on struct value).
-	if rv.IsValid() && rv.Kind() == reflect.Struct {
-		for _, name := range shutdownTimeoutFieldNames {
-			if f := rv.FieldByName(name); f.IsValid() && f.Type() == reflect.TypeOf(time.Duration(0)) {
-				if d := time.Duration(f.Int()); d > 0 {
-					return d
-				}
-			}
-		}
-	}
-	return fallback
-}
-
-// killService attempts a best-effort kill of a stuck service.
-func killService(svc any, logger *slog.Logger) {
-	svc = unwrapService(svc)
-	rv := reflect.ValueOf(svc)
-	killMethodNames := []string{"Kill", "Terminate", "Abort", "Cancel"}
-	for _, name := range killMethodNames {
-		if m := rv.MethodByName(name); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() <= 1 {
-				func() {
-					defer func() { _ = recover() }()
-					m.Call(nil)
-				}()
-				return
-			}
-			if mt.NumIn() == 1 && mt.In(0) == reflect.TypeOf((*context.Context)(nil)).Elem() && mt.NumOut() <= 1 {
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				func() {
-					defer func() { _ = recover() }()
-					m.Call([]reflect.Value{reflect.ValueOf(ctx)})
-				}()
-				cancel()
-				return
-			}
-		}
-	}
-	_ = logger
-}
-
 func componentName(v any) string {
 	if n, ok := v.(Named); ok {
 		if s := n.Name(); s != "" {
@@ -985,26 +891,6 @@ func serviceName(v any, idx int) string {
 // TopologicalSort orders services so that dependencies precede dependents.
 // Cycles (including self-dependencies) produce an error.
 func TopologicalSort(services []any) ([]any, error) {
-	return topologicalSort(services)
-}
-
-// SortServices is an alias for TopologicalSort.
-func SortServices(services []any) ([]any, error) {
-	return topologicalSort(services)
-}
-
-// SortByDependencies is an alias for TopologicalSort.
-func SortByDependencies(services []any) ([]any, error) {
-	return topologicalSort(services)
-}
-
-// TopologicalOrder is an alias for TopologicalSort.
-func TopologicalOrder(services []any) ([]any, error) {
-	return topologicalSort(services)
-}
-
-// Sort is an alias for TopologicalSort.
-func Sort(services []any) ([]any, error) {
 	return topologicalSort(services)
 }
 
@@ -1098,49 +984,5 @@ func ServiceRequired(v any) bool {
 	if rp, ok := v.(requirementProvider); ok {
 		return rp.Requirement() == registry.Required
 	}
-	type stringRequirementProvider interface{ Requirement() string }
-	if rp, ok := v.(stringRequirementProvider); ok {
-		return rp.Requirement() == "required"
-	}
-
-	// Reflection-based fallback for common method names.
-	rv := reflect.ValueOf(v)
-	if rv.IsValid() {
-		if m := rv.MethodByName("Required"); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
-				return m.Call(nil)[0].Bool()
-			}
-		}
-		if m := rv.MethodByName("Optional"); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
-				return !m.Call(nil)[0].Bool()
-			}
-		}
-		if m := rv.MethodByName("IsRequired"); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
-				return m.Call(nil)[0].Bool()
-			}
-		}
-		if m := rv.MethodByName("IsOptional"); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() == 1 && mt.Out(0).Kind() == reflect.Bool {
-				return !m.Call(nil)[0].Bool()
-			}
-		}
-		if m := rv.MethodByName("Requirement"); m.IsValid() {
-			mt := m.Type()
-			if mt.NumIn() == 0 && mt.NumOut() == 1 {
-				out := m.Call(nil)[0]
-				if out.Kind() == reflect.String {
-					return out.String() == "required"
-				}
-			}
-		}
-	}
 	return true
 }
-
-func serviceRequired(v any) bool { return ServiceRequired(v) }

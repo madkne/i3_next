@@ -16,9 +16,6 @@ type Snapshot struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Data is an alias for the snapshot's value field access.
-func (s Snapshot) Data() any { return s.Value }
-
 // State is a thread-safe, versioned state container.
 type State struct {
 	mu        sync.RWMutex
@@ -26,9 +23,6 @@ type State struct {
 	current   Snapshot
 	listeners []func(Snapshot)
 }
-
-// Store is an alias for State.
-type Store = State
 
 // New creates a new State with a nil initial value.
 func New() *State { return NewState(nil) }
@@ -40,9 +34,6 @@ func NewState(initial any) *State {
 	s.version = 0
 	return s
 }
-
-// NewStore is an alias for NewState.
-func NewStore(initial any) *State { return NewState(initial) }
 
 // Snapshot returns the current immutable snapshot.
 func (s *State) Snapshot() Snapshot {
@@ -64,17 +55,8 @@ func (s *State) Version() Version {
 	return s.version
 }
 
-// Current is an alias for Snapshot.
-func (s *State) Current() Snapshot { return s.Snapshot() }
-
-// Get is an alias for Snapshot.
-func (s *State) Get() Snapshot { return s.Snapshot() }
-
 // Value returns the current value.
 func (s *State) Value() any { return s.Snapshot().Value }
-
-// Set updates the state value and increments the version.
-func (s *State) Set(value any) Snapshot { return s.Update(value) }
 
 // Update updates the state value and increments the version.
 func (s *State) Update(value any) Snapshot {

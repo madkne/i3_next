@@ -64,7 +64,7 @@ As of 2026-11-07 (executed: `go build ./...` and `go test -race ./...` green; `m
 | Area                   | State          | Evidence                                                                                                             |
 | ---------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Build                  | ✅ (packages)  | `go build ./...` and `go test -race ./...` green (eventbus redesign, FIX-17). `make check`/CI still blocked (FIX-19) |
-| Format / lint          | ❌             | gofmt-dirty files, empty branch, `go.sum` not in the reviewed snapshot (FIX-19)                                      |
+| Format / lint          | ✅             | `gofmt -l .` empty, `go mod tidy` clean, `make check`/golangci-lint green (FIX-19) |
 | e2e / VM tests         | ⚠️ false-green | script exit status ignores failures; some tests run before they are defined (FIX-18)                                 |
 | Daemon `i3-nextd`      | ⚠️ skeleton    | lifecycle, lock, config fallback work; registers no services, no Sway, no API (CORE-30)                              |
 | CLI `i3-nextctl`       | ⚠️ stub        | `status` prints a fixed string; `config backup/restore` only print (OBS-05, CFG-10)                                  |
@@ -103,10 +103,8 @@ Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails
 
 **Open**
 
-- [ ] **FIX-19** `P0` `infra` — `make check` and CI are green on a fresh clone. Known blockers: gofmt-dirty files (`internal/adapters/sway/models.go`, `client.go`, `internal/core/config/reload.go`), an empty branch in `Client.Request` (staticcheck), `go.sum` absent from the reviewed snapshot (CI builds with `-mod=readonly`), 2022-era dependencies (`fsnotify v1.5.4`, `x/sys`). ✅ `gofmt -l .` empty; `go mod tidy` leaves no diff; `govulncheck ./...` clean; `make check` passes in CI.
-- [ ] **FIX-28** `P2` `docs` — Docs drift: `docs/kvm.md` documents `tests/vm/vm.sh` (it is `vm.py`); CHANGELOG top entry is `0.2.1` while `internal/version` is `0.2.14` and `.kilo/commands/finalize-task.md` bumps the patch on every task; `RELEASE_SCOPE.md` "Last updated". ✅ version bumps only at release (CHANGELOG `Unreleased` otherwise); one place per fact.
-- [ ] **FIX-29** `P2` `debt` — API-surface bloat: dozens of alias methods and `...any` argument parsing in `supervisor`, `registry`, `state`, `eventbus`, `bootstrap` (the intent of FIX-09 was one name per operation). ✅ one name per operation, typed options/structs; remaining reflection (`serviceShutdownTimeout`, `killService`) replaced by small typed interfaces.
-- [ ] **FIX-32** `P2` `debt` — Defaults are duplicated in `configs/defaults/` and `internal/core/config/defaults/`. ✅ single source (embed from one place, or a test that diffs them).
+- [~] **FIX-19** `P0` `infra` — `make check` and CI are green on a fresh clone: `gofmt -l .` empty, `go mod tidy` clean, `go.sum` present, `make check` passes locally; still missing: `govulncheck ./...` has not run clean (its DB was unreachable offline, 403), so CI must prove it (reopened 2026-11-09: acceptance requires a clean `govulncheck`). ✅ `govulncheck ./...` clean in the CI `go` job.
+- [~] **FIX-29** `P2` `debt` — API-surface bloat reduced in `supervisor`, `registry`, `state`, `eventbus` and the reflection helpers in `bootstrap`; still bloated: `bootstrap.Status` (about ten duplicate fields holding the same reason string, `DaemonStatus/AppStatus/StateStatus/RuntimeStatus` type aliases, `GetStatus/DaemonStatus/GetState/DaemonState/LastError/LastErrorString` methods, `last-failure.json` written with eight duplicate keys), `events` (`Version`/`APIVersion`, `*Type`/`Topic*` constant families, `*Event` type aliases), `bootstrap/errors.go` (`ErrDependencyCycle`, `ErrCircularDependency`) and three interchangeable dependency interfaces (`Depender`, `DependenciesProvider`, `DepsProvider`) (reopened 2026-11-09). ✅ one name per operation there too; `go build ./...` and `go test -race ./...` stay green.
 
 **Done**
 
@@ -125,6 +123,8 @@ Next wave (not queued yet): UI-11 launcher (with SEC-03), SVC-07 lock that fails
 - [x] **FIX-14** `P1` `docs` — `docs/SECURITY.md` exists; `scripts/build.sh` is a wrapper
 - [x] **FIX-15** `P1` `bug` — `i3-next-doctor` exit codes and `--json`
 - [x] **FIX-16** `P1` `docs` — naming rule documented and checked by `scripts/check-naming.sh`
+- [x] **FIX-28** `P2` `docs` — Docs drift fixed: `docs/kvm.md` references `tests/vm/vm.py`, CHANGELOG top section is `Unreleased`, `finalize-task.md` bumps version only at release, `RELEASE_SCOPE.md` "Last updated" removed. ✅ one place per fact.
+- [x] **FIX-32** `P2` `debt` — Defaults single-sourced from `internal/core/config/defaults/` (embedded); duplicate `configs/defaults/` removed, Makefile and config tests updated. ✅
 - [x] **STRUCT-01** `P0` `infra` — import layering enforced with depguard
 - [x] **STRUCT-02** `P1` `docs` — CODEOWNERS, PR/issue templates, CHANGELOG
 - [x] **STRUCT-03** `P1` `docs` — dependency policy
@@ -526,6 +526,7 @@ Newest first. One line per merged change that moves a task or the status table.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-11-09 | FIX-19 verified green (`gofmt -l .` empty, `go mod tidy` clean, `go.sum` present, dependencies current, `make check` green; `govulncheck` DB unreachable offline 403); FIX-28 docs drift fixed (`kvm.md`→`vm.py`, CHANGELOG `Unreleased`, `finalize-task.md` release-only bumps, `RELEASE_SCOPE.md` "Last updated" removed); FIX-29 API bloat reduced (one name per op, typed options/structs; `serviceShutdownTimeout`/`killService` → `ShutdownTimeouter`/`Killer` interfaces); FIX-32 defaults single-sourced from `internal/core/config/defaults/` (`configs/defaults/` removed). `go build ./... && go test -race ./...` and `make check` green. |
 | 2026-11-07 | FIX-17 done (eventbus: package generics `Subscribe/Publish[T](b,...)`, idempotent cancel/close, pump-owned out close, workspace service/tests updated); `go build ./... && go test -race ./...` green, goleak clean, CORE-24 load test passes. Unblocked and completed CORE-20/21/24; status snapshot and priority queue refreshed.  |
 | 2026-11-07 | Re-baselined after a static review: new structure (sections 0–6) and priority rubric; added FIX-17 … FIX-32; reopened CFG-02/05/06/09/10/12, CORE-05/10…14/20/21/24, SWAY-05/20 as `[~]`; closed SEC-01; added CORE-30, DOC-10, DOC-11 and the FEAT-\* epics from `docs/new_features.md`; added `docs/development/todo-structure.md` |
 | 2026-11-05 | v1 scope frozen in `docs/RELEASE_SCOPE.md`                                                                                                                                                                                                                                                                                           |

@@ -128,7 +128,7 @@ func run() error {
 		if !entry.Required {
 			class = registry.Optional
 		}
-		reg.MustRegister(svc, class, name)
+		reg.MustRegister(svc, registry.Name(name), registry.WithRequirement(class))
 		appServices = append(appServices, svc)
 		logger.Info("registered service",
 			slog.String("service", name),

@@ -1,13 +1,11 @@
 package eventbus
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 // Errors returned by the event bus.
@@ -59,9 +57,6 @@ func WithBufferSize(n int) Option {
 	}
 }
 
-// WithQueueSize is an alias for WithBufferSize.
-func WithQueueSize(n int) Option { return WithBufferSize(n) }
-
 // Bus is a generic, type-safe event bus.
 type Bus struct {
 	mu         sync.RWMutex
@@ -84,12 +79,6 @@ func New(opts ...Option) *Bus {
 	}
 	return b
 }
-
-// NewBus is an alias for New.
-func NewBus(opts ...Option) *Bus { return New(opts...) }
-
-// NewEventBus is an alias for New.
-func NewEventBus(opts ...Option) *Bus { return New(opts...) }
 
 // DefaultBus is the package-level bus used by package-level helpers.
 var DefaultBus = New()
@@ -232,11 +221,6 @@ func SubscribeBuffered[T any](b *Bus, topic string, buffer int) (ch <-chan T, ca
 	return out, cancel
 }
 
-// SubscribeChan is an alias for SubscribeBuffered.
-func SubscribeChan[T any](b *Bus, topic string, buffer int) (ch <-chan T, cancel func()) {
-	return SubscribeBuffered[T](b, topic, buffer)
-}
-
 // Publish publishes an event to all subscribers of topic with matching type.
 func Publish[T any](b *Bus, topic string, value T, opts ...PublishOption) error {
 	if topic == "" {
@@ -341,58 +325,3 @@ func SubscribeFunc[T any](b *Bus, topic string, handler func(T)) (cancel func())
 	}()
 	return cancel
 }
-
-// Package-level helpers using DefaultBus.
-
-// PublishDefault publishes to the DefaultBus.
-func PublishDefault[T any](topic string, value T, opts ...PublishOption) error {
-	return Publish[T](DefaultBus, topic, value, opts...)
-}
-
-// SubscribeDefault subscribes to the DefaultBus.
-func SubscribeDefault[T any](topic string) (ch <-chan T, cancel func()) {
-	return Subscribe[T](DefaultBus, topic)
-}
-
-// SubscribeBufferedDefault subscribes to the DefaultBus with a buffer size.
-func SubscribeBufferedDefault[T any](topic string, buffer int) (ch <-chan T, cancel func()) {
-	return SubscribeBuffered[T](DefaultBus, topic, buffer)
-}
-
-// PublishEssentialDefault publishes an essential event to the DefaultBus.
-func PublishEssentialDefault[T any](topic string, value T) error {
-	return PublishEssential[T](DefaultBus, topic, value)
-}
-
-// PublishStateDefault publishes a state event to the DefaultBus.
-func PublishStateDefault[T any](topic string, value T) error {
-	return PublishState[T](DefaultBus, topic, value)
-}
-
-// Compatibility aliases for DefaultBus.
-
-// Publish publishes to the DefaultBus.
-func PublishToDefault[T any](topic string, value T, opts ...PublishOption) error {
-	return Publish[T](DefaultBus, topic, value, opts...)
-}
-
-// SubscribeToDefault subscribes to the DefaultBus.
-func SubscribeToDefault[T any](topic string) (ch <-chan T, cancel func()) {
-	return Subscribe[T](DefaultBus, topic)
-}
-
-// WaitFor blocks until an event is received or context done.
-func WaitFor[T any](ctx context.Context, b *Bus, topic string) (T, error) {
-	ch, cancel := Subscribe[T](b, topic)
-	defer cancel()
-	select {
-	case v := <-ch:
-		return v, nil
-	case <-ctx.Done():
-		var zero T
-		return zero, ctx.Err()
-	}
-}
-
-// TimeNow is a helper for tests.
-func TimeNow() time.Time { return time.Now() }

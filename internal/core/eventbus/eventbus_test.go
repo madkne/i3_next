@@ -79,9 +79,9 @@ func TestPanicIsolation(t *testing.T) {
 }
 
 func TestPackageLevel(t *testing.T) {
-	ch, cancel := SubscribeDefault[int]("pkg")
+	ch, cancel := Subscribe[int](DefaultBus, "pkg")
 	defer cancel()
-	if err := PublishDefault("pkg", 7); err != nil {
+	if err := Publish(DefaultBus, "pkg", 7); err != nil {
 		t.Fatal(err)
 	}
 	select {

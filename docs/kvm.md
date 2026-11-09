@@ -11,7 +11,7 @@ Go and the Wayland tooling. Two ways to use it:
 
 ## Setup
 
-    tests/vm/vm.sh doctor     # tells you what is missing
+    tests/vm/vm.py doctor     # tells you what is missing
     make vm-up                # first run downloads the image and provisions (~5-10 min)
 
 Add `-include tests/vm/vm.mk` to the Makefile and `tests/vm/.state/` to `.gitignore`.
@@ -20,9 +20,9 @@ Add `-include tests/vm/vm.mk` to the Makefile and `tests/vm/.state/` to `.gitign
 
     make vm-test              # incremental, ~1 min
     make vm-test-clean        # reverts to the "provisioned" snapshot first
-    tests/vm/vm.sh ssh        # poke around
-    tests/vm/vm.sh nic down   # simulate a network outage
-    tests/vm/vm.sh screenshot # grab the guest display
+    tests/vm/vm.py ssh        # poke around
+    tests/vm/vm.py nic down   # simulate a network outage
+    tests/vm/vm.py screenshot # grab the guest display
 
 Tunables (env): `VM_CPUS VM_RAM_MB VM_DISK_GB VM_GRAPHICS=spice|vnc|none VM_GL=1
 OUTPUTS=2 LIBVIRT_URI=qemu:///session INSTALL_QUICKSHELL=0`.
@@ -38,9 +38,9 @@ already running with `$SWAYSOCK`/`$WAYLAND_DISPLAY` exported, so `swaymsg`,
 
 * Battery/AC: `sudo modprobe test_power` in the guest (fake `power_supply`).
 * Extra monitors: `swaymsg create_output` (headless) or `OUTPUTS=N`.
-* Network: `vm.sh nic up|down`, or `virsh attach-interface` for hotplug.
+* Network: `vm.py nic up|down`, or `virsh attach-interface` for hotplug.
 * Bluetooth/audio: `modprobe vhci-hcd` / add `--sound` to `virt-install`.
-* Real 3D: `VM_GL=1 vm.sh recreate` (needs OpenGL on the host).
+* Real 3D: `VM_GL=1 vm.py recreate` (needs OpenGL on the host).
 
 ## Notes
 

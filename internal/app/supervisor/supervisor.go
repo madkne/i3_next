@@ -20,6 +20,12 @@ import (
 	"i3_next/internal/api/contracts"
 )
 
+var (
+	ErrNotFound       = errors.New("process not found")
+	ErrInvalidArg     = errors.New("invalid argument")
+	ErrAlreadyRunning = errors.New("process already running")
+)
+
 // ProcessState represents the lifecycle state of a supervised process.
 type ProcessState string
 
@@ -37,82 +43,30 @@ const (
 
 // RestartPolicy configures automatic restarts.
 type RestartPolicy struct {
-	Enabled bool
-
-	MaxRestarts     int
-	MaxRestart      int
-	RestartLimit    int
-	MaxRestartCount int
-	Restarts        int
-
+	Enabled        bool
+	MaxRestarts    int
 	Window         time.Duration
-	RestartWindow  time.Duration
-	WindowDuration time.Duration
-
 	InitialBackoff time.Duration
-	InitialDelay   time.Duration
-	Backoff        time.Duration
-	Delay          time.Duration
-
-	MaxBackoff time.Duration
-	MaxDelay   time.Duration
-
-	Multiplier    float64
-	BackoffFactor float64
-	Factor        float64
-
-	Jitter        float64
-	JitterEnabled bool
+	MaxBackoff     time.Duration
+	Multiplier     float64
+	Jitter         float64
 }
 
 // ProcessSpec describes a child process.
 type ProcessSpec struct {
-	Name  string
-	ID    string
-	Label string
-	Title string
-
-	Command    string
-	Path       string
-	Executable string
-	Binary     string
-	Program    string
-
-	Args      []string
-	Argv      []string
-	Arguments []string
-
-	Env         map[string]string
-	Environment map[string]string
-	EnvVars     map[string]string
-	EnvList     []string
-
+	Name         string
+	ID           string
+	Command      string
+	Args         []string
+	Env          map[string]string
 	EnvAllowlist []string
-	AllowedEnv   []string
-	EnvAllow     []string
-	AllowEnv     []string
+	Dir          string
+	GracePeriod  time.Duration
+	Restart      RestartPolicy
 
-	Dir        string
-	WorkingDir string
-	Cwd        string
-
-	GracePeriod     time.Duration
-	StopTimeout     time.Duration
-	ShutdownTimeout time.Duration
-	Timeout         time.Duration
-
-	Restart       RestartPolicy
-	RestartPolicy RestartPolicy
-	Policy        RestartPolicy
-
-	MaxRestarts int
-	Window      time.Duration
-
-	Logger *slog.Logger
-
-	Stdout io.Writer
-	Stderr io.Writer
-
+	Logger     *slog.Logger
+	Stdout     io.Writer
+	Stderr     io.Writer
 	Supervisor *Supervisor
 }
 
@@ -126,20 +80,6 @@ type ProcessStatus struct {
 	LastError string `json:"last_error,omitempty"`
 	Degraded  bool   `json:"degraded"`
 }
-
-// Aliases.
-type (
-	Child             = Process
-	ManagedProcess    = Process
-	SupervisedProcess = Process
-	Job               = Process
-	Task              = Process
-	ProcessConfig     = ProcessSpec
-	Config            = ProcessSpec
-	Spec              = ProcessSpec
-	ProcessInfo       = ProcessStatus
-	Status            = ProcessStatus
-)
 
 // Supervisor manages child processes.
 type Supervisor struct {
@@ -174,9 +114,6 @@ func WithGracePeriod(d time.Duration) Option {
 	}
 }
 
-func WithStopTimeout(d time.Duration) Option     { return WithGracePeriod(d) }
-func WithShutdownTimeout(d time.Duration) Option { return WithGracePeriod(d) }
-
 func WithEnvAllowlist(list []string) Option {
 	return func(s *Supervisor) {
 		if len(list) > 0 {
@@ -185,36 +122,38 @@ func WithEnvAllowlist(list []string) Option {
 	}
 }
 
-func WithAllowedEnv(list []string) Option { return WithEnvAllowlist(list) }
-func WithEnvAllow(list []string) Option   { return WithEnvAllowlist(list) }
-
 //nolint:gocritic // public API takes value
 func WithRestartPolicy(p RestartPolicy) Option {
 	return func(s *Supervisor) {
 		s.defaultPolicy = mergePolicy(s.defaultPolicy, p)
 	}
 }
+
 func WithMaxRestarts(n int) Option {
 	return func(s *Supervisor) {
 		s.defaultPolicy.MaxRestarts = n
 		s.defaultPolicy.Enabled = true
 	}
 }
+
 func WithRestartWindow(d time.Duration) Option {
 	return func(s *Supervisor) {
 		s.defaultPolicy.Window = d
 	}
 }
+
 func WithInitialBackoff(d time.Duration) Option {
 	return func(s *Supervisor) {
 		s.defaultPolicy.InitialBackoff = d
 	}
 }
+
 func WithMaxBackoff(d time.Duration) Option {
 	return func(s *Supervisor) {
 		s.defaultPolicy.MaxBackoff = d
 	}
 }
+
 func WithBackoffMultiplier(f float64) Option {
 	return func(s *Supervisor) {
 		s.defaultPolicy.Multiplier = f
@@ -243,14 +182,6 @@ func New(logger *slog.Logger, opts ...Option) *Supervisor {
 	}
 	return s
 }
-
-func NewSupervisor(logger *slog.Logger, opts ...Option) *Supervisor { return New(logger, opts...) }
-func NewProcessSupervisor(logger *slog.Logger, opts ...Option) *Supervisor {
-	return New(logger, opts...)
-}
-
-// Aliases for constructor name.
-var NewManager = NewSupervisor
 
 // Process is a supervised child process.
 type Process struct {
@@ -282,14 +213,24 @@ type Process struct {
 	stopped       chan struct{}
 }
 
-func NewProcess(args ...any) *Process {
-	s := New(nil)
-	spec := s.parseSpec(args...)
-	return s.newProcess(spec)
+//nolint:gocritic // value semantics
+func (s *Supervisor) newProcess(spec ProcessSpec) *Process {
+	spec = s.parseSpec(spec)
+	pol := mergePolicy(spec.Restart, s.defaultPolicy)
+	p := &Process{
+		supervisor: s,
+		logger:     spec.Logger,
+		name:       spec.Name,
+		spec:       spec,
+		pol:        pol,
+		state:      StatePending,
+		stopped:    make(chan struct{}),
+	}
+	return p
 }
 
-//nolint:gocritic // internal copy
-func (s *Supervisor) newProcess(spec ProcessSpec) *Process {
+//nolint:gocritic // value semantics
+func (s *Supervisor) parseSpec(spec ProcessSpec) ProcessSpec {
 	if spec.Logger == nil {
 		spec.Logger = s.logger
 	}
@@ -303,31 +244,19 @@ func (s *Supervisor) newProcess(spec ProcessSpec) *Process {
 	if spec.Name == "" || spec.Name == "." || spec.Name == "/" {
 		spec.Name = "process"
 	}
-	pol := mergePolicy(spec.Restart, s.defaultPolicy)
-	p := &Process{
-		supervisor: s,
-		logger:     spec.Logger,
-		name:       spec.Name,
-		spec:       spec,
-		pol:        pol,
-		state:      StatePending,
-		stopped:    make(chan struct{}),
+	if spec.GracePeriod == 0 {
+		spec.GracePeriod = s.gracePeriod
 	}
-	// merge top-level policy fields
-	if spec.RestartPolicy.MaxRestarts != 0 || spec.RestartPolicy.Window != 0 {
-		p.pol = mergePolicy(p.pol, spec.RestartPolicy)
+	if spec.GracePeriod == 0 {
+		spec.GracePeriod = 5 * time.Second
 	}
-	if spec.Policy.MaxRestarts != 0 || spec.Policy.Window != 0 {
-		p.pol = mergePolicy(p.pol, spec.Policy)
+	if spec.Logger == nil {
+		spec.Logger = s.logger
 	}
-	// top-level shortcuts
-	if spec.MaxRestarts != 0 {
-		p.pol.MaxRestarts = spec.MaxRestarts
+	if spec.Supervisor == nil {
+		spec.Supervisor = s
 	}
-	if spec.Window != 0 {
-		p.pol.Window = spec.Window
-	}
-	return p
+	return spec
 }
 
 //nolint:gocritic // value semantics
@@ -338,320 +267,147 @@ func mergePolicy(a, b RestartPolicy) RestartPolicy {
 	if b.MaxRestarts != 0 {
 		a.MaxRestarts = b.MaxRestarts
 	}
-	if b.MaxRestart != 0 {
-		a.MaxRestarts = b.MaxRestart
-	}
-	if b.RestartLimit != 0 {
-		a.MaxRestarts = b.RestartLimit
-	}
-	if b.MaxRestartCount != 0 {
-		a.MaxRestarts = b.MaxRestartCount
-	}
-	if b.Restarts != 0 {
-		a.MaxRestarts = b.Restarts
-	}
 	if b.Window != 0 {
 		a.Window = b.Window
-	}
-	if b.RestartWindow != 0 {
-		a.Window = b.RestartWindow
-	}
-	if b.WindowDuration != 0 {
-		a.Window = b.WindowDuration
 	}
 	if b.InitialBackoff != 0 {
 		a.InitialBackoff = b.InitialBackoff
 	}
-	if b.InitialDelay != 0 {
-		a.InitialBackoff = b.InitialDelay
-	}
-	if b.Backoff != 0 {
-		a.InitialBackoff = b.Backoff
-	}
-	if b.Delay != 0 {
-		a.InitialBackoff = b.Delay
-	}
 	if b.MaxBackoff != 0 {
 		a.MaxBackoff = b.MaxBackoff
-	}
-	if b.MaxDelay != 0 {
-		a.MaxBackoff = b.MaxDelay
 	}
 	if b.Multiplier != 0 {
 		a.Multiplier = b.Multiplier
 	}
-	if b.BackoffFactor != 0 {
-		a.Multiplier = b.BackoffFactor
-	}
-	if b.Factor != 0 {
-		a.Multiplier = b.Factor
-	}
 	if b.Jitter != 0 {
 		a.Jitter = b.Jitter
 	}
-	if b.JitterEnabled {
-		a.JitterEnabled = true
-		if a.Jitter == 0 {
-			a.Jitter = 0.2
-		}
-	}
-	if b.Enabled {
-		a.Enabled = true
-	}
 	return a
 }
 
-func (s *Supervisor) parseSpec(args ...any) ProcessSpec {
-	spec := ProcessSpec{}
-	for _, a := range args {
-		switch v := a.(type) {
-		case ProcessSpec:
-			spec = mergeSpec(spec, v)
-		case *ProcessSpec:
-			if v != nil {
-				spec = mergeSpec(spec, *v)
-			}
-		case *Process:
-			if v != nil {
-				spec.Name = v.Name()
-				spec.Restart = v.pol
-			}
-		case string:
-			if spec.Name == "" { //nolint:gocritic
-				spec.Name = v
-			} else if spec.Command == "" {
-				spec.Command = v
-			} else {
-				spec.Args = append(spec.Args, v)
-			}
-		case []string:
-			spec.Args = append(spec.Args, v...)
-		case []any:
-			for _, e := range v {
-				if s, ok := e.(string); ok {
-					spec.Args = append(spec.Args, s)
-				}
-			}
-		case map[string]string:
-			if spec.Env == nil {
-				spec.Env = make(map[string]string)
-			}
-			for k, val := range v {
-				spec.Env[k] = val
-			}
-		case RestartPolicy:
-			spec.Restart = mergePolicy(spec.Restart, v)
-		case *RestartPolicy:
-			if v != nil {
-				spec.Restart = mergePolicy(spec.Restart, *v)
-			}
-		case time.Duration:
-			if spec.GracePeriod == 0 {
-				spec.GracePeriod = v
-			} else if spec.StopTimeout == 0 {
-				spec.StopTimeout = v
-			}
-		case *slog.Logger:
-			spec.Logger = v
-		case Option:
-			// ignore
-		default:
-			// reflection-based field extraction
-			// reflection-based extraction not supported
-			_ = a
-		}
-	}
-	// normalize command
-	if spec.Command == "" {
-		spec.Command = spec.Path
-	}
-	if spec.Command == "" {
-		spec.Command = spec.Executable
-	}
-	if spec.Command == "" {
-		spec.Command = spec.Binary
-	}
-	if spec.Command == "" {
-		spec.Command = spec.Program
-	}
-	if spec.Args == nil {
-		if spec.Argv != nil {
-			spec.Args = spec.Argv
-		} else if spec.Arguments != nil {
-			spec.Args = spec.Arguments
-		}
-	} else {
-		if spec.Argv != nil {
-			spec.Args = append([]string{}, spec.Argv...)
-		}
-	}
-	if spec.Dir == "" {
-		spec.Dir = spec.WorkingDir
-	}
-	if spec.Dir == "" {
-		spec.Dir = spec.Cwd
-	}
-	if spec.Env == nil {
-		if spec.Environment != nil {
-			spec.Env = spec.Environment
-		} else if spec.EnvVars != nil {
-			spec.Env = spec.EnvVars
-		}
-	}
-	if spec.EnvAllowlist == nil {
-		if spec.AllowedEnv != nil { //nolint:gocritic
-			spec.EnvAllowlist = spec.AllowedEnv
-		} else if spec.EnvAllow != nil {
-			spec.EnvAllowlist = spec.EnvAllow
-		} else if spec.AllowEnv != nil {
-			spec.EnvAllowlist = spec.AllowEnv
-		}
-	}
-	if spec.GracePeriod == 0 {
-		spec.GracePeriod = spec.StopTimeout
-	}
-	if spec.GracePeriod == 0 {
-		spec.GracePeriod = spec.ShutdownTimeout
-	}
-	if spec.GracePeriod == 0 {
-		spec.GracePeriod = spec.Timeout
-	}
-	if spec.Logger == nil {
-		spec.Logger = s.logger
-	}
-	if spec.Supervisor == nil {
-		spec.Supervisor = s
-	}
-	// merge top-level restart shortcuts
-	if spec.MaxRestarts != 0 {
-		spec.Restart.MaxRestarts = spec.MaxRestarts
-	}
-	if spec.Window != 0 {
-		spec.Restart.Window = spec.Window
-	}
-	return spec
-}
-
+// Add registers a process without starting it.
+//
 //nolint:gocritic // value semantics
-func mergeSpec(a, b ProcessSpec) ProcessSpec {
-	if b.Name != "" {
-		a.Name = b.Name
+func (s *Supervisor) Add(spec ProcessSpec) (*Process, error) {
+	p := s.newProcess(spec)
+	s.track(p)
+	return p, nil
+}
+
+// Start creates (if needed) and starts a process.
+//
+//nolint:gocritic // value semantics
+func (s *Supervisor) Start(ctx context.Context, spec ProcessSpec) (*Process, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if b.ID != "" {
-		a.ID = b.ID
-	}
-	if b.Label != "" {
-		a.Label = b.Label
-	}
-	if b.Title != "" {
-		a.Title = b.Title
-	}
-	if b.Command != "" {
-		a.Command = b.Command
-	}
-	if b.Path != "" {
-		a.Path = b.Path
-	}
-	if b.Executable != "" {
-		a.Executable = b.Executable
-	}
-	if b.Binary != "" {
-		a.Binary = b.Binary
-	}
-	if b.Program != "" {
-		a.Program = b.Program
-	}
-	if len(b.Args) > 0 {
-		a.Args = append([]string{}, b.Args...)
-	}
-	if len(b.Argv) > 0 {
-		a.Argv = append([]string{}, b.Argv...)
-	}
-	if len(b.Arguments) > 0 {
-		a.Arguments = append([]string{}, b.Arguments...)
-	}
-	if b.Env != nil {
-		if a.Env == nil {
-			a.Env = make(map[string]string)
+	// Normalise first: track() keys processes by the normalised name, so the
+	// lookup below must use the same key or a second Start spawns a duplicate.
+	spec = s.parseSpec(spec)
+	s.mu.Lock()
+	if existing, ok := s.processes[spec.Name]; ok {
+		s.mu.Unlock()
+		if err := existing.Start(ctx); err != nil {
+			return existing, err
 		}
-		for k, v := range b.Env {
-			a.Env[k] = v
-		}
+		return existing, nil
 	}
-	if b.Environment != nil {
-		if a.Env == nil {
-			a.Env = make(map[string]string)
-		}
-		for k, v := range b.Environment {
-			a.Env[k] = v
-		}
+	s.mu.Unlock()
+	p := s.newProcess(spec)
+	s.track(p)
+	if err := p.Start(ctx); err != nil {
+		s.untrack(p.Name())
+		return p, err
 	}
-	if b.EnvVars != nil {
-		if a.Env == nil {
-			a.Env = make(map[string]string)
-		}
-		for k, v := range b.EnvVars {
-			a.Env[k] = v
-		}
+	return p, nil
+}
+
+// Stop stops the named process.
+func (s *Supervisor) Stop(ctx context.Context, name string) error {
+	s.mu.Lock()
+	p := s.processes[name]
+	s.mu.Unlock()
+	if p == nil {
+		return fmt.Errorf("%w: %s", ErrNotFound, name)
 	}
-	if len(b.EnvList) > 0 {
-		a.EnvList = append([]string{}, b.EnvList...)
+	return p.Stop(ctx)
+}
+
+// StopAll stops every tracked process.
+func (s *Supervisor) StopAll(ctx context.Context) error {
+	s.mu.Lock()
+	list := make([]*Process, 0, len(s.processes))
+	for _, p := range s.processes {
+		list = append(list, p)
 	}
-	if len(b.EnvAllowlist) > 0 {
-		a.EnvAllowlist = append([]string{}, b.EnvAllowlist...)
+	s.mu.Unlock()
+	for _, p := range list {
+		_ = p.Stop(ctx)
 	}
-	if len(b.AllowedEnv) > 0 {
-		a.EnvAllowlist = append([]string{}, b.AllowedEnv...)
+	return nil
+}
+
+// Get returns a process by name.
+func (s *Supervisor) Get(name string) (*Process, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.processes[name]
+	return p, ok
+}
+
+// List returns all processes.
+func (s *Supervisor) List() []*Process {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*Process, 0, len(s.processes))
+	for _, p := range s.processes {
+		out = append(out, p)
 	}
-	if len(b.EnvAllow) > 0 {
-		a.EnvAllowlist = append([]string{}, b.EnvAllow...)
+	return out
+}
+
+// Status returns map of statuses.
+func (s *Supervisor) Status() map[string]ProcessStatus {
+	out := make(map[string]ProcessStatus)
+	for _, p := range s.List() {
+		out[p.Name()] = p.Status()
 	}
-	if len(b.AllowEnv) > 0 {
-		a.EnvAllowlist = append([]string{}, b.AllowEnv...)
+	return out
+}
+
+// Service interface implementation.
+func (s *Supervisor) Name() string { return "supervisor" }
+func (s *Supervisor) StartService(ctx context.Context) error {
+	return nil
+}
+func (s *Supervisor) StopService(ctx context.Context) error {
+	return s.StopAll(ctx)
+}
+func (s *Supervisor) Health(ctx context.Context) contracts.ServiceInfo {
+	return contracts.ServiceInfo{Name: "supervisor", State: contracts.ServiceRunning, Health: contracts.HealthOK}
+}
+
+func (s *Supervisor) setDegraded(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if v && s.logger != nil {
+		s.logger.Warn("supervisor degraded")
 	}
-	if b.Dir != "" {
-		a.Dir = b.Dir
+}
+
+func (s *Supervisor) track(p *Process) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.processes == nil {
+		s.processes = make(map[string]*Process)
 	}
-	if b.WorkingDir != "" {
-		a.WorkingDir = b.WorkingDir
-	}
-	if b.Cwd != "" {
-		a.Cwd = b.Cwd
-	}
-	if b.GracePeriod != 0 {
-		a.GracePeriod = b.GracePeriod
-	}
-	if b.StopTimeout != 0 {
-		a.StopTimeout = b.StopTimeout
-	}
-	if b.ShutdownTimeout != 0 {
-		a.ShutdownTimeout = b.ShutdownTimeout
-	}
-	if b.Timeout != 0 {
-		a.Timeout = b.Timeout
-	}
-	a.Restart = mergePolicy(a.Restart, b.Restart)
-	a.RestartPolicy = mergePolicy(a.RestartPolicy, b.RestartPolicy)
-	a.Policy = mergePolicy(a.Policy, b.Policy)
-	if b.MaxRestarts != 0 {
-		a.MaxRestarts = b.MaxRestarts
-	}
-	if b.Window != 0 {
-		a.Window = b.Window
-	}
-	if b.Logger != nil {
-		a.Logger = b.Logger
-	}
-	if b.Stdout != nil {
-		a.Stdout = b.Stdout
-	}
-	if b.Stderr != nil {
-		a.Stderr = b.Stderr
-	}
-	if b.Supervisor != nil {
-		a.Supervisor = b.Supervisor
-	}
-	return a
+	s.processes[p.Name()] = p
+}
+
+func (s *Supervisor) untrack(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.processes, name)
 }
 
 // Name returns the process name.
@@ -701,9 +457,6 @@ func (p *Process) RestartCount() int {
 	return len(p.restarts)
 }
 
-// Restarts returns number of restarts (alias).
-func (p *Process) Restarts() int { return p.RestartCount() }
-
 // RestartsList returns timestamps.
 func (p *Process) RestartsList() []time.Time {
 	p.mu.Lock()
@@ -749,10 +502,6 @@ func (p *Process) Status() ProcessStatus {
 	}
 }
 
-// Aliases for Status method.
-func (p *Process) GetStatus() ProcessStatus { return p.Status() }
-func (p *Process) Info() ProcessStatus      { return p.Status() }
-
 // Start begins supervision.
 func (p *Process) Start(ctx context.Context) error {
 	if ctx == nil {
@@ -761,7 +510,7 @@ func (p *Process) Start(ctx context.Context) error {
 	p.mu.Lock()
 	if p.cancel != nil {
 		p.mu.Unlock()
-		return errors.New("process already running")
+		return ErrAlreadyRunning
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
@@ -777,11 +526,7 @@ func (p *Process) Start(ctx context.Context) error {
 // Stop stops the process.
 func (p *Process) Stop(ctx context.Context) error {
 	p.mu.Lock()
-	if p.stopRequested {
-		// already stopping
-	} else {
-		p.stopRequested = true
-	}
+	p.stopRequested = true
 	cancel := p.cancel
 	pid := p.pid
 	grace := p.gracePeriod()
@@ -860,8 +605,20 @@ func (p *Process) Kill() error {
 	return nil
 }
 
-// Terminate alias.
-func (p *Process) Terminate() error { return p.Kill() }
+// Health returns the process health as a service info.
+func (p *Process) Health(ctx context.Context) contracts.ServiceInfo {
+	st := p.Status()
+	health := contracts.HealthOK
+	state := contracts.ServiceRunning
+	if st.State == string(StateFailed) {
+		health = contracts.HealthFail
+		state = contracts.ServiceFailed
+	} else if st.State == string(StateDegraded) {
+		health = contracts.HealthWarn
+		state = contracts.ServiceDegraded
+	}
+	return contracts.ServiceInfo{Name: p.Name(), State: state, Health: health}
+}
 
 func (p *Process) runLoop(ctx context.Context) {
 	defer func() {
@@ -889,7 +646,6 @@ func (p *Process) runLoop(ctx context.Context) {
 	for {
 		isRestart := !first
 
-		// check restart limit before a restart attempt
 		p.mu.Lock()
 		now := time.Now()
 		cutoff := now.Add(-pol.Window)
@@ -923,7 +679,6 @@ func (p *Process) runLoop(ctx context.Context) {
 			return
 		}
 
-		// launch
 		p.setState(StateStarting)
 		err := p.runOnce(ctx)
 		first = false
@@ -938,7 +693,6 @@ func (p *Process) runLoop(ctx context.Context) {
 		}
 
 		if err == nil {
-			// process exited successfully
 			if !pol.Enabled {
 				p.setState(StateStopped)
 				return
@@ -956,11 +710,10 @@ func (p *Process) runLoop(ctx context.Context) {
 
 		p.setState(StateRestarting)
 		wait := p.backoff
-		// jitter
 		if pol.Jitter > 0 {
 			jitter := time.Duration(float64(wait) * pol.Jitter)
 			if jitter > 0 {
-				wait += time.Duration(rand.Int63n(int64(jitter) + 1)) //nolint:gosec // test file permissions // non-cryptographic jitter is sufficient
+				wait += time.Duration(rand.Int63n(int64(jitter) + 1)) //nolint:gosec // non-cryptographic jitter is sufficient
 			}
 		}
 		if wait > pol.MaxBackoff && pol.MaxBackoff > 0 {
@@ -979,7 +732,6 @@ func (p *Process) runLoop(ctx context.Context) {
 			return
 		}
 
-		// increase backoff
 		p.mu.Lock()
 		if p.backoff <= 0 {
 			p.backoff = pol.InitialBackoff
@@ -1013,7 +765,6 @@ func (p *Process) runOnce(ctx context.Context) error {
 			return err
 		}
 	}
-	// validate permissions/owner
 	if fi, err := os.Stat(cmdPath); err == nil {
 		if fi.Mode()&0o111 == 0 {
 			err := fmt.Errorf("command not executable: %s", cmdPath)
@@ -1063,7 +814,6 @@ func (p *Process) runOnce(ctx context.Context) error {
 		)
 	}
 
-	// capture output
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -1117,12 +867,6 @@ func (p *Process) args() []string {
 	if len(spec.Args) > 0 {
 		return spec.Args
 	}
-	if len(spec.Argv) > 0 {
-		return spec.Argv
-	}
-	if len(spec.Arguments) > 0 {
-		return spec.Arguments
-	}
 	return nil
 }
 
@@ -1159,14 +903,6 @@ func (p *Process) captureOutput(r io.ReadCloser, stream string, secrets []string
 func (p *Process) normalizedPolicy() RestartPolicy {
 	pol := p.pol
 	pol = mergePolicy(pol, p.spec.Restart)
-	pol = mergePolicy(pol, p.spec.RestartPolicy)
-	pol = mergePolicy(pol, p.spec.Policy)
-	if p.spec.MaxRestarts != 0 {
-		pol.MaxRestarts = p.spec.MaxRestarts
-	}
-	if p.spec.Window != 0 {
-		pol.Window = p.spec.Window
-	}
 	if !pol.Enabled && (pol.MaxRestarts != 0 || pol.Window != 0 || pol.InitialBackoff != 0 || pol.MaxBackoff != 0) {
 		pol.Enabled = true
 	}
@@ -1182,263 +918,10 @@ func (p *Process) normalizedPolicy() RestartPolicy {
 	if pol.Window == 0 {
 		pol.Window = time.Minute
 	}
-	if pol.Jitter == 0 && !pol.JitterEnabled {
-		pol.Jitter = 0.2
-	}
-	if pol.JitterEnabled && pol.Jitter == 0 {
+	if pol.Jitter == 0 {
 		pol.Jitter = 0.2
 	}
 	return pol
-}
-
-// Supervisor methods
-
-func (s *Supervisor) setDegraded(v bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Supervisor itself has no degraded flag exposed; log only.
-	if v && s.logger != nil {
-		s.logger.Warn("supervisor degraded")
-	}
-}
-
-func (s *Supervisor) track(p *Process) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.processes == nil {
-		s.processes = make(map[string]*Process)
-	}
-	s.processes[p.Name()] = p
-}
-
-func (s *Supervisor) untrack(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.processes, name)
-}
-
-// Add registers a process without starting it.
-func (s *Supervisor) Add(args ...any) (*Process, error) {
-	spec := s.parseSpec(args...)
-	p := s.newProcess(spec)
-	s.track(p)
-	return p, nil
-}
-
-// Aliases
-func (s *Supervisor) AddProcess(args ...any) (*Process, error) { return s.Add(args...) }
-func (s *Supervisor) Register(args ...any) (*Process, error)   { return s.Add(args...) }
-func (s *Supervisor) RegisterProcess(args ...any) (*Process, error) {
-	return s.Add(args...)
-}
-func (s *Supervisor) Create(args ...any) (*Process, error) { return s.Add(args...) }
-func (s *Supervisor) CreateProcess(args ...any) (*Process, error) {
-	return s.Add(args...)
-}
-func (s *Supervisor) NewProcess(args ...any) (*Process, error) { return s.Add(args...) }
-
-// Start creates (if needed) and starts a process.
-func (s *Supervisor) Start(ctx context.Context, args ...any) (*Process, error) {
-	if len(args) == 0 {
-		s.mu.Lock()
-		list := make([]*Process, 0, len(s.processes))
-		for _, p := range s.processes {
-			list = append(list, p)
-		}
-		s.mu.Unlock()
-		for _, p := range list {
-			_ = p.Start(ctx)
-		}
-		return nil, nil
-	}
-	// If first arg is existing process, start it
-	if len(args) > 0 {
-		if p, ok := args[0].(*Process); ok && len(args) == 1 {
-			if err := p.Start(ctx); err != nil {
-				return p, err
-			}
-			s.track(p)
-			return p, nil
-		}
-	}
-	spec := s.parseSpec(args...)
-	// reuse existing
-	s.mu.Lock()
-	if existing, ok := s.processes[spec.Name]; ok {
-		s.mu.Unlock()
-		if err := existing.Start(ctx); err != nil {
-			return existing, err
-		}
-		return existing, nil
-	}
-	s.mu.Unlock()
-	p := s.newProcess(spec)
-	s.track(p)
-	if err := p.Start(ctx); err != nil {
-		s.untrack(p.Name())
-		return p, err
-	}
-	return p, nil
-}
-
-// Aliases
-func (s *Supervisor) Run(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) Launch(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) Spawn(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) Supervise(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) Manage(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) StartProcess(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) RunProcess(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) LaunchProcess(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-func (s *Supervisor) SpawnProcess(ctx context.Context, args ...any) (*Process, error) {
-	return s.Start(ctx, args...)
-}
-
-// Stop stops a process (or all).
-func (s *Supervisor) Stop(ctx context.Context, args ...any) error {
-	if len(args) == 0 {
-		return s.StopAll(ctx)
-	}
-	for _, a := range args {
-		switch v := a.(type) {
-		case *Process:
-			_ = v.Stop(ctx)
-		case string:
-			s.mu.Lock()
-			p := s.processes[v]
-			s.mu.Unlock()
-			if p != nil {
-				_ = p.Stop(ctx)
-			}
-		}
-	}
-	return nil
-}
-
-// Aliases
-func (s *Supervisor) StopProcess(ctx context.Context, args ...any) error {
-	return s.Stop(ctx, args...)
-}
-func (s *Supervisor) Kill(ctx context.Context, args ...any) error {
-	if len(args) == 0 {
-		return s.StopAll(ctx)
-	}
-	for _, a := range args {
-		if p, ok := a.(*Process); ok { //nolint:gocritic
-			_ = p.Kill()
-		} else if name, ok := a.(string); ok {
-			s.mu.Lock()
-			p := s.processes[name]
-			s.mu.Unlock()
-			if p != nil {
-				_ = p.Kill()
-			}
-		}
-	}
-	return nil
-}
-func (s *Supervisor) Terminate(ctx context.Context, args ...any) error {
-	return s.Kill(ctx, args...)
-}
-func (s *Supervisor) Shutdown(ctx context.Context) error { return s.StopAll(ctx) }
-func (s *Supervisor) StopAll(ctx context.Context) error {
-	s.mu.Lock()
-	list := make([]*Process, 0, len(s.processes))
-	for _, p := range s.processes {
-		list = append(list, p)
-	}
-	s.mu.Unlock()
-	for _, p := range list {
-		_ = p.Stop(ctx)
-	}
-	return nil
-}
-
-// Get returns a process by name.
-func (s *Supervisor) Get(name string) (*Process, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	p, ok := s.processes[name]
-	return p, ok
-}
-
-// Aliases
-func (s *Supervisor) Lookup(name string) (*Process, bool)  { return s.Get(name) }
-func (s *Supervisor) Find(name string) (*Process, bool)    { return s.Get(name) }
-func (s *Supervisor) Process(name string) (*Process, bool) { return s.Get(name) }
-func (s *Supervisor) GetProcess(name string) (*Process, bool) {
-	return s.Get(name)
-}
-
-// List returns all processes.
-func (s *Supervisor) List() []*Process {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make([]*Process, 0, len(s.processes))
-	for _, p := range s.processes {
-		out = append(out, p)
-	}
-	return out
-}
-
-// Aliases
-func (s *Supervisor) Processes() []*Process { return s.List() }
-func (s *Supervisor) All() []*Process       { return s.List() }
-func (s *Supervisor) AllProcesses() []*Process {
-	return s.List()
-}
-
-// Status returns map of statuses.
-func (s *Supervisor) Status() map[string]ProcessStatus {
-	out := make(map[string]ProcessStatus)
-	for _, p := range s.List() {
-		out[p.Name()] = p.Status()
-	}
-	return out
-}
-
-// Service interface implementation.
-func (s *Supervisor) Name() string { return "supervisor" }
-func (s *Supervisor) StartService(ctx context.Context) error {
-	return nil
-}
-func (s *Supervisor) StartSvc(ctx context.Context) error { return s.StartService(ctx) }
-func (s *Supervisor) StopService(ctx context.Context) error {
-	return s.StopAll(ctx)
-}
-func (s *Supervisor) Health(ctx context.Context) contracts.ServiceInfo {
-	return contracts.ServiceInfo{Name: "supervisor", State: contracts.ServiceRunning, Health: contracts.HealthOK}
-}
-
-// Process Service interface
-func (p *Process) Health(ctx context.Context) contracts.ServiceInfo {
-	st := p.Status()
-	health := contracts.HealthOK
-	state := contracts.ServiceRunning
-	if st.State == string(StateFailed) {
-		health = contracts.HealthFail
-		state = contracts.ServiceFailed
-	} else if st.State == string(StateDegraded) {
-		health = contracts.HealthWarn
-		state = contracts.ServiceDegraded
-	}
-	return contracts.ServiceInfo{Name: p.Name(), State: state, Health: health}
 }
 
 // Helpers: env
@@ -1453,7 +936,6 @@ func buildEnv(spec ProcessSpec, sup *Supervisor) ([]string, []string) {
 		allow = []string{"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_*", "TERM", "DISPLAY", "WAYLAND_DISPLAY", "SWAYSOCK", "XDG_*", "XAUTHORITY", "TMPDIR", "TZ"}
 	}
 
-	// filter os.Environ
 	result := make(map[string]string)
 	for _, e := range os.Environ() {
 		k, v, ok := splitEnv(e)
@@ -1464,26 +946,12 @@ func buildEnv(spec ProcessSpec, sup *Supervisor) ([]string, []string) {
 			result[k] = v
 		}
 	}
-	// spec.Env overrides
 	if spec.Env != nil {
 		for k, v := range spec.Env {
-			if nameAllowed(k, allow) || true {
-				result[k] = v
-			}
-		}
-	}
-	// EnvList
-	for _, e := range spec.EnvList {
-		k, v, ok := splitEnv(e)
-		if !ok {
-			continue
-		}
-		if nameAllowed(k, allow) || true {
 			result[k] = v
 		}
 	}
 
-	// collect secrets
 	var secrets []string
 	for k, v := range result {
 		if isSensitive(k) && v != "" {
@@ -1540,16 +1008,4 @@ func redactString(s string, secrets []string) string {
 
 func redactCommand(cmd string, secrets []string) string {
 	return redactString(cmd, secrets)
-}
-
-// Package-level helpers.
-func RunProcess(ctx context.Context, args ...any) (*Process, error) {
-	s := New(nil)
-	return s.Start(ctx, args...)
-}
-func StartProcess(ctx context.Context, args ...any) (*Process, error) {
-	return RunProcess(ctx, args...)
-}
-func Supervise(ctx context.Context, args ...any) (*Process, error) {
-	return RunProcess(ctx, args...)
 }

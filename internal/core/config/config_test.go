@@ -1,14 +1,11 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestParseDesktopValid(t *testing.T) {
-	b, _ := os.ReadFile("../../../configs/defaults/desktop.yaml")
-	c, err := ParseDesktop(b)
+	c, err := ParseDesktop(DefaultDesktop)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,13 +23,19 @@ func TestParseUnknownField(t *testing.T) {
 
 func TestParseAllFiles(t *testing.T) {
 	cases := map[string]func([]byte) error{
+		"desktop.yaml":   func(b []byte) error { _, e := ParseDesktop(b); return e },
 		"plugins.yaml":   func(b []byte) error { _, e := ParsePlugins(b); return e },
 		"services.yaml":  func(b []byte) error { _, e := ParseServices(b); return e },
 		"shortcuts.yaml": func(b []byte) error { _, e := ParseShortcuts(b); return e },
 	}
+	data := map[string][]byte{
+		"desktop.yaml":   DefaultDesktop,
+		"plugins.yaml":   DefaultPlugins,
+		"services.yaml":  DefaultServices,
+		"shortcuts.yaml": DefaultShortcuts,
+	}
 	for name, fn := range cases {
-		b, _ := os.ReadFile(filepath.Join("..", "..", "..", "configs", "defaults", name))
-		if err := fn(b); err != nil {
+		if err := fn(data[name]); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}

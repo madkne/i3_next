@@ -153,7 +153,7 @@ func (s *Service) rebuild(ctx context.Context) error {
 	}
 	tree, _ := s.adapter.GetTree(ctx)
 	snap := Snapshot{Workspaces: ws, Outputs: out, Tree: tree}
-	s.state.Set(snap)
+	s.state.Update(snap)
 	s.publishWorkspaceEvents(ws)
 	s.publishOutputEvents(out)
 	return nil
