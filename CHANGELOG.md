@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency policy recording the reason-for-each-new-dependency and license-check requirement (STRUCT-03, ⛓ SEC-10)
 - Import-layering enforcement via `depguard` in `.golangci.yml` (`core <- adapters/services <- api`) (STRUCT-01)
 - Desktop core skeleton (from the former `0.2.1` entry): event bus, state, process supervisor, bootstrap lifecycle, version, and shared contracts
+- Daemon wiring: `i3-nextd` registers the reconnecting Sway adapter → workspace service → supervised `quickshell` and `swaybg`, honours `enabled` from `services.yaml`, and logs `ServiceStateChanged` plus every workspace/output/sway event (CORE-30)
 
 ### Changed
 - Default configuration is embedded from `internal/core/config/defaults/` only; `make install` installs those files and config tests parse the embedded bytes (FIX-32)
