@@ -154,6 +154,8 @@ func (c *Client) Request(ctx context.Context, typ MessageType, payload []byte) (
 		}
 		c.pendingMu.Unlock()
 		return Message{}, ctx.Err()
+	case <-c.readerDone:
+		return Message{}, errors.New("sway: reader stopped")
 	}
 }
 
@@ -235,10 +237,28 @@ func (c *Client) Subscribe(ctx context.Context, events []string) (<-chan Message
 	c.pendingMu.Unlock()
 	reply, err := c.Request(ctx, Subscribe, payload)
 	if err != nil {
+		c.pendingMu.Lock()
+		// remove ch from events
+		for i, x := range c.events {
+			if x == ch {
+				c.events = append(c.events[:i], c.events[i+1:]...)
+				break
+			}
+		}
+		c.pendingMu.Unlock()
 		return nil, err
 	}
 	var sr subscribeReply
 	if err := json.Unmarshal(reply.Payload, &sr); err != nil || !sr.Success {
+		c.pendingMu.Lock()
+		// remove ch from events
+		for i, x := range c.events {
+			if x == ch {
+				c.events = append(c.events[:i], c.events[i+1:]...)
+				break
+			}
+		}
+		c.pendingMu.Unlock()
 		return nil, errors.New("i3-ipc: subscribe failed")
 	}
 	return ch, nil

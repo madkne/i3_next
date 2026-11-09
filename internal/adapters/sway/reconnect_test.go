@@ -5,10 +5,13 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"i3_next/internal/api/events"
+	"i3_next/internal/core/eventbus"
 )
 
 func TestReconnectingAdapterNameAndInitialState(t *testing.T) {
-	a := NewReconnectingAdapter(nil)
+	a := NewReconnectingAdapter(nil, nil)
 	if a.Name() != "sway" {
 		t.Fatalf("name = %q, want %q", a.Name(), "sway")
 	}
@@ -18,7 +21,7 @@ func TestReconnectingAdapterNameAndInitialState(t *testing.T) {
 }
 
 func TestReconnectingAdapterStartStopFailingDial(t *testing.T) {
-	a := NewReconnectingAdapter(nil)
+	a := NewReconnectingAdapter(nil, nil)
 	a.dial = func(ctx context.Context) (*Client, error) {
 		return nil, errors.New("dial failed")
 	}
@@ -37,7 +40,7 @@ func TestReconnectingAdapterStartStopFailingDial(t *testing.T) {
 }
 
 func TestReconnectingAdapterSubscribe(t *testing.T) {
-	a := NewReconnectingAdapter(nil)
+	a := NewReconnectingAdapter(nil, nil)
 	a.dial = func(ctx context.Context) (*Client, error) {
 		return nil, errors.New("dial failed")
 	}
@@ -53,5 +56,45 @@ func TestReconnectingAdapterSubscribe(t *testing.T) {
 	}
 	if ch == nil {
 		t.Fatal("Subscribe returned nil channel")
+	}
+}
+
+func TestReconnectingAdapterPublishesConnectedDisconnected(t *testing.T) {
+	bus := eventbus.New()
+	defer bus.Close()
+
+	connectedCh := make(chan events.Event, 1)
+	disconnectedCh := make(chan events.Event, 1)
+	cancelConn := eventbus.SubscribeFunc[events.Event](bus, events.TopicSwayConnected, func(ev events.Event) {
+		connectedCh <- ev
+	})
+	cancelDisc := eventbus.SubscribeFunc[events.Event](bus, events.TopicSwayDisconnected, func(ev events.Event) {
+		disconnectedCh <- ev
+	})
+	defer cancelConn()
+	defer cancelDisc()
+
+	a := NewReconnectingAdapter(nil, bus)
+	dialCount := 0
+	a.dial = func(ctx context.Context) (*Client, error) {
+		dialCount++
+		if dialCount == 1 {
+			return nil, errors.New("dial failed")
+		}
+		// Second dial succeeds but immediately fails read
+		return nil, errors.New("dial failed")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := a.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = a.Stop(context.Background()) }()
+
+	// Should not receive connected event on failed dial
+	select {
+	case <-connectedCh:
+		t.Fatal("unexpected connected event on failed dial")
+	case <-time.After(500 * time.Millisecond):
 	}
 }

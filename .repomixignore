@@ -1,5 +1,33 @@
+# Version control and generated data.
 .git
 deployments/data
+# Image files
 *.svg
 *.png
-tests/vm/.state
+
+
+# Build outputs and Go test artifacts (also listed in .gitignore).
+build/
+dist/
+bin/
+vendor/
+*.out
+*.test
+*.prof
+*.cover
+coverage/
+
+# VM runtime state; keep VM scripts and cloud-init templates.
+ tests/vm/.state
+
+# Local caches and editor/OS metadata.
+.cache/
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Runtime logs.
+*.log

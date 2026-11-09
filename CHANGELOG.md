@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Sway IPC message types and event types now match `sway-ipc(7)` specification: `Subscribe=2`, `GetOutputs=3`, `GetTree=4`, `GetVersion=7`, `GetInputs=100`, and events `workspace=0`, `output=1`, `mode=2`, `window=3`, `shutdown=6`, `input=21`; the incorrect `outputsFromTree` fallback was removed; table tests pin the constants against the man page (FIX-33)
+- Sway client correctness: `Client.Request` returns error immediately when reader dies (no more hanging on context); `Client.Subscribe` cleans up event channel on failure (no leak); `ReconnectingAdapter.RunCommand` properly checks `success:false` in reply; added fake-server tests for connection loss, timeout recovery, concurrent requests, failing commands, and event channel close on disconnect (FIX-21)
+- ReconnectingAdapter now publishes `SwayConnected`/`SwayDisconnected` events; workspace service rebuilds snapshot on reconnect; shutdown event triggers graceful degradation; second `Subscribe` with new events triggers re-subscription without reconnect (SWAY-04)
 - Bump the minimum Go toolchain to 1.26.3 so CI uses standard-library security fixes required by `govulncheck`.
 
 ### Security

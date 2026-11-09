@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"i3_next/internal/api/contracts"
+	"i3_next/internal/api/events"
 	coreerrors "i3_next/internal/core/errors"
+	"i3_next/internal/core/eventbus"
 	"i3_next/internal/core/registry"
 )
 
@@ -42,6 +44,7 @@ type sub struct {
 type ReconnectingAdapter struct {
 	logger *slog.Logger
 	dial   func(ctx context.Context) (*Client, error)
+	bus    *eventbus.Bus // for publishing SwayConnected/SwayDisconnected
 
 	mu     sync.Mutex
 	client *Client
@@ -60,13 +63,14 @@ type ReconnectingAdapter struct {
 
 // NewReconnectingAdapter creates a reconnecting sway adapter that dials the
 // default sway IPC socket.
-func NewReconnectingAdapter(logger *slog.Logger) *ReconnectingAdapter {
+func NewReconnectingAdapter(logger *slog.Logger, bus *eventbus.Bus) *ReconnectingAdapter {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return &ReconnectingAdapter{
 		logger: logger,
 		dial:   defaultDial,
+		bus:    bus,
 		subs:   make(map[uint64]*sub),
 		done:   make(chan struct{}),
 	}
@@ -150,7 +154,7 @@ func (a *ReconnectingAdapter) RunCommand(ctx context.Context, command string) (M
 	if c == nil {
 		return Message{}, coreerrors.ErrUnavailable
 	}
-	return c.Request(ctx, RunCommand, []byte(command))
+	return c.RunCommand(ctx, command)
 }
 
 func (a *ReconnectingAdapter) currentClient() *Client {
@@ -203,18 +207,28 @@ func (a *ReconnectingAdapter) GetVersion(ctx context.Context) (*Version, error) 
 // stable across reconnects: events are forwarded to it from whichever
 // connection is currently active. Events are sent non-blockingly and may be
 // dropped if the consumer is slow.
-func (a *ReconnectingAdapter) Subscribe(ctx context.Context, events []string) (<-chan Message, error) {
+func (a *ReconnectingAdapter) Subscribe(ctx context.Context, eventNames []string) (<-chan Message, error) {
 	ch := make(chan Message, 16)
 	a.mu.Lock()
 	id := a.nextID
 	a.nextID++
-	a.subs[id] = &sub{events: append([]string(nil), events...), ch: ch}
+	a.subs[id] = &sub{events: append([]string(nil), eventNames...), ch: ch}
 	a.events = unionEvents(a.subs)
 	client := a.client
 	parent := a.runCtx
+	// If there's already a reader running, we need to restart it with the new event list
+	restartReader := client != nil && parent != nil && a.readerCancel != nil
 	a.mu.Unlock()
 
-	if client != nil && parent != nil {
+	if restartReader {
+		a.mu.Lock()
+		if a.readerCancel != nil {
+			a.readerCancel()
+			a.readerCancel = nil
+		}
+		a.mu.Unlock()
+		go a.subscribeAndRead(parent, client)
+	} else if client != nil && parent != nil {
 		go a.subscribeAndRead(parent, client)
 	}
 	return ch, nil
@@ -254,6 +268,7 @@ func (a *ReconnectingAdapter) run(ctx context.Context) {
 			_ = old.Close()
 		}
 		a.setConnected(true)
+		a.publishConnected(client)
 		a.logger.Info("sway: connected")
 		if len(a.currentEvents()) > 0 {
 			go a.subscribeAndRead(ctx, client)
@@ -273,6 +288,7 @@ func (a *ReconnectingAdapter) run(ctx context.Context) {
 		a.readerDone = nil
 		a.mu.Unlock()
 		a.setConnected(false)
+		a.publishDisconnected("connection lost")
 		a.logger.Warn("sway: disconnected, reconnecting", slog.Duration("backoff", backoff))
 		backoff = reconnectInitialBackoff
 		a.waitBackoff(ctx, &backoff)
@@ -306,10 +322,42 @@ func (a *ReconnectingAdapter) setConnected(v bool) {
 	a.connected.Store(v)
 }
 
+func (a *ReconnectingAdapter) publishConnected(client *Client) {
+	if a.bus == nil {
+		return
+	}
+	// Get sway version for the event
+	versionStr := ""
+	if v, err := client.GetVersion(context.Background()); err == nil {
+		versionStr = v.HumanReadable
+	}
+	socketPath := ""
+	if p, err := SocketPath(context.Background()); err == nil {
+		socketPath = p
+	}
+	ev := events.NewEvent(events.TypeSwayConnected, "sway", events.SwayConnected{
+		Version:    events.Version,
+		SocketPath: socketPath,
+		VersionStr: versionStr,
+	})
+	_ = eventbus.Publish(a.bus, string(events.TypeSwayConnected), ev)
+}
+
+func (a *ReconnectingAdapter) publishDisconnected(reason string) {
+	if a.bus == nil {
+		return
+	}
+	ev := events.NewEvent(events.TypeSwayDisconnected, "sway", events.SwayDisconnected{
+		Version: events.Version,
+		Reason:  reason,
+	})
+	_ = eventbus.Publish(a.bus, string(events.TypeSwayDisconnected), ev)
+}
+
 func (a *ReconnectingAdapter) subscribeAndRead(parent context.Context, client *Client) {
 	a.mu.Lock()
-	events := append([]string(nil), a.events...)
-	if a.client != client || a.readerCancel != nil || len(events) == 0 {
+	eventNames := append([]string(nil), a.events...)
+	if a.client != client || a.readerCancel != nil || len(eventNames) == 0 {
 		a.mu.Unlock()
 		return
 	}
@@ -319,7 +367,7 @@ func (a *ReconnectingAdapter) subscribeAndRead(parent context.Context, client *C
 	a.readerDone = rd
 	a.mu.Unlock()
 
-	cech, err := client.Subscribe(readerCtx, events)
+	cech, err := client.Subscribe(readerCtx, eventNames)
 	if err != nil {
 		a.logger.Warn("sway: subscribe failed", slog.Any("error", err))
 		cancel()
@@ -344,6 +392,13 @@ func (a *ReconnectingAdapter) eventReader(ctx context.Context, cech <-chan Messa
 			}
 			if !IsEvent(m.Type) {
 				continue
+			}
+			// Handle shutdown event specially - trigger snapshot rebuild
+			if m.Type == EventShutdown {
+				a.logger.Info("sway: shutdown event received")
+				a.publishDisconnected("sway shutdown")
+				// The connection will be closed by sway, readerDone will be signaled
+				return
 			}
 			a.mu.Lock()
 			subs := make([]*sub, 0, len(a.subs))
@@ -378,12 +433,12 @@ func unionEvents(subs map[uint64]*sub) []string {
 	return out
 }
 
-func (a *ReconnectingAdapter) eventWantedFor(t MessageType, events []string) bool {
+func (a *ReconnectingAdapter) eventWantedFor(t MessageType, eventNames []string) bool {
 	name, ok := eventName[t]
 	if !ok {
 		return false
 	}
-	for _, e := range events {
+	for _, e := range eventNames {
 		if e == name {
 			return true
 		}

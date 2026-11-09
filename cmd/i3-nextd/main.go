@@ -84,7 +84,7 @@ func run() error {
 	reg := registry.New()
 
 	// The sway adapter is built first: the workspace service depends on it.
-	adapter := sway.NewReconnectingAdapter(logger)
+	adapter := sway.NewReconnectingAdapter(logger, bus)
 
 	sup := supervisor.New(logger,
 		supervisor.WithEnvAllowlist([]string{

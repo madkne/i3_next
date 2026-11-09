@@ -35,11 +35,13 @@ type Service struct {
 	bus     *eventbus.Bus
 	state   *state.State
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel        context.CancelFunc
+	done          chan struct{}
+	swayCancel    context.CancelFunc
+	swayDone      chan struct{}
+	rebuildCancel context.CancelFunc
 }
 
-// New creates a new workspace service.
 func New(adapter sway.Adapter, bus *eventbus.Bus) *Service {
 	return &Service{
 		logger:  slog.New(slog.NewTextHandler(nil, nil)),
@@ -53,25 +55,18 @@ func New(adapter sway.Adapter, bus *eventbus.Bus) *Service {
 
 func (s *Service) Name() string { return s.name }
 
-// DependsOn returns the services this service must start after.
 func (s *Service) DependsOn() []string { return []string{"sway"} }
 
-// Optional reports that the workspace service is optional: the daemon keeps
-// running (degraded) while sway is unavailable.
 func (s *Service) Optional() bool { return true }
 
-// Snapshot returns the current snapshot.
 func (s *Service) Snapshot() state.Snapshot { return s.state.Snapshot() }
 
-// State returns the underlying state container.
 func (s *Service) State() *state.State { return s.state }
 
 func (s *Service) Start(ctx context.Context) error {
 	if s.adapter == nil {
 		return nil
 	}
-	// Wait for the sway adapter to be connected before rebuilding the
-	// snapshot; the adapter reconnects asynchronously.
 	if c, ok := s.adapter.(connectable); ok {
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
@@ -86,19 +81,32 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.publishState(contracts.ServiceRunning, "")
+
 	subCtx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
-	ch, err := s.adapter.Subscribe(subCtx, []string{"workspace", "window", "output", "shutdown"})
+	s.swayCancel = cancel
+	swayCh, err := s.adapter.Subscribe(subCtx, []string{"workspace", "window", "output", "shutdown"})
 	if err != nil {
 		cancel()
 		s.publishState(contracts.ServiceFailed, err.Error())
 		return err
 	}
-	go s.loop(subCtx, ch)
+	s.swayDone = make(chan struct{})
+	go s.swayLoop(subCtx, swayCh)
+
+	rebuildCtx, rebuildCancel := context.WithCancel(ctx)
+	s.rebuildCancel = rebuildCancel
+	go s.rebuildLoop(rebuildCtx)
+
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) error {
+	if s.swayCancel != nil {
+		s.swayCancel()
+	}
+	if s.rebuildCancel != nil {
+		s.rebuildCancel()
+	}
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -194,8 +202,8 @@ func (s *Service) publishOutputEvents(out []sway.Output) {
 	}
 }
 
-func (s *Service) loop(ctx context.Context, ch <-chan sway.Message) {
-	defer close(s.done)
+func (s *Service) swayLoop(ctx context.Context, ch <-chan sway.Message) {
+	defer close(s.swayDone)
 	for {
 		select {
 		case <-ctx.Done():
@@ -203,15 +211,50 @@ func (s *Service) loop(ctx context.Context, ch <-chan sway.Message) {
 		case msg, ok := <-ch:
 			if !ok {
 				s.publishState(contracts.ServiceDegraded, "sway disconnected")
-				if s.bus != nil {
-					ev := events.NewEvent(events.TypeSwayDisconnected, s.name, events.SwayDisconnected{Reason: "channel closed"})
-					_ = eventbus.Publish(s.bus, string(events.TypeSwayDisconnected), ev)
-				}
 				return
 			}
 			_ = msg
 			if err := s.rebuild(ctx); err != nil {
 				s.publishState(contracts.ServiceDegraded, err.Error())
+			}
+		}
+	}
+}
+
+func (s *Service) rebuildLoop(ctx context.Context) {
+	connectedCh := make(chan events.Event, 1)
+	disconnectedCh := make(chan events.Event, 1)
+	cancelConn := eventbus.SubscribeFunc[events.Event](s.bus, events.TopicSwayConnected, func(ev events.Event) {
+		select {
+		case connectedCh <- ev:
+		default:
+		}
+	})
+	cancelDisc := eventbus.SubscribeFunc[events.Event](s.bus, events.TopicSwayDisconnected, func(ev events.Event) {
+		select {
+		case disconnectedCh <- ev:
+		default:
+		}
+	})
+	defer cancelConn()
+	defer cancelDisc()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-connectedCh:
+			s.logger.Info("sway reconnected, rebuilding snapshot")
+			if err := s.rebuild(ctx); err != nil {
+				s.logger.Error("failed to rebuild snapshot on reconnect", slog.Any("error", err))
+				s.publishState(contracts.ServiceDegraded, err.Error())
+			} else {
+				s.publishState(contracts.ServiceRunning, "")
+			}
+		case ev := <-disconnectedCh:
+			if payload, ok := ev.Payload.(events.SwayDisconnected); ok && payload.Reason == "sway shutdown" {
+				s.logger.Info("sway shutdown, marking as degraded")
+				s.publishState(contracts.ServiceDegraded, "sway shutdown")
 			}
 		}
 	}
@@ -225,7 +268,6 @@ func (s *Service) runCommand(ctx context.Context, command string) error {
 	return err
 }
 
-// FocusWorkspace focuses the workspace with the given name.
 func (s *Service) FocusWorkspace(ctx context.Context, name string) error {
 	if err := sway.ValidateWorkspaceName(name); err != nil {
 		return err
@@ -233,7 +275,6 @@ func (s *Service) FocusWorkspace(ctx context.Context, name string) error {
 	return s.runCommand(ctx, fmt.Sprintf("workspace %s", name))
 }
 
-// MoveWindowToWorkspace moves the window matching app_id to the workspace.
 func (s *Service) MoveWindowToWorkspace(ctx context.Context, appID, workspace string) error {
 	if err := sway.ValidateAppID(appID); err != nil {
 		return err
@@ -244,7 +285,6 @@ func (s *Service) MoveWindowToWorkspace(ctx context.Context, appID, workspace st
 	return s.runCommand(ctx, fmt.Sprintf("[app_id=%q] move window to workspace %s", appID, workspace))
 }
 
-// CloseWindow closes the window matching app_id, or the focused window when appID is empty.
 func (s *Service) CloseWindow(ctx context.Context, appID string) error {
 	if appID != "" {
 		if err := sway.ValidateAppID(appID); err != nil {
@@ -255,7 +295,6 @@ func (s *Service) CloseWindow(ctx context.Context, appID string) error {
 	return s.runCommand(ctx, "kill")
 }
 
-// FloatingEnable enables floating mode for the window matching app_id.
 func (s *Service) FloatingEnable(ctx context.Context, appID string) error {
 	if err := sway.ValidateAppID(appID); err != nil {
 		return err
@@ -263,7 +302,6 @@ func (s *Service) FloatingEnable(ctx context.Context, appID string) error {
 	return s.runCommand(ctx, fmt.Sprintf("[app_id=%q] floating enable", appID))
 }
 
-// FloatingDisable disables floating mode for the window matching app_id.
 func (s *Service) FloatingDisable(ctx context.Context, appID string) error {
 	if err := sway.ValidateAppID(appID); err != nil {
 		return err
@@ -271,8 +309,6 @@ func (s *Service) FloatingDisable(ctx context.Context, appID string) error {
 	return s.runCommand(ctx, fmt.Sprintf("[app_id=%q] floating disable", appID))
 }
 
-// Layout sets the layout of the focused container. layout must be one of
-// splitv, splith, stacking, tabbed, or "toggle split".
 func (s *Service) Layout(ctx context.Context, layout string) error {
 	switch layout {
 	case "splitv", "splith", "stacking", "tabbed", "toggle split":
@@ -282,7 +318,6 @@ func (s *Service) Layout(ctx context.Context, layout string) error {
 	return s.runCommand(ctx, fmt.Sprintf("layout %s", layout))
 }
 
-// MoveToOutput moves the window matching app_id to the output.
 func (s *Service) MoveToOutput(ctx context.Context, appID, output string) error {
 	if err := sway.ValidateAppID(appID); err != nil {
 		return err
