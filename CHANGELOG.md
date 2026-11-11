@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `rpc.Listen` creates the control socket (`$XDG_RUNTIME_DIR/i3-next/i3-next.sock`) with mode `0600` inside a `0700` directory, sets the umask around `Listen`, and removes a stale socket only when connecting is refused; live sockets and non-socket files are never removed (API-02)
 - `CODEOWNERS`, pull request and issue templates, and this `CHANGELOG.md` (STRUCT-02)
 - Dependency policy recording the reason-for-each-new-dependency and license-check requirement (STRUCT-03, ⛓ SEC-10)
 - Import-layering enforcement via `depguard` in `.golangci.yml` (`core <- adapters/services <- api`) (STRUCT-01)

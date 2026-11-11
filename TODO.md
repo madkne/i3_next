@@ -91,7 +91,7 @@ Ordered by the rubric in 0.3: first make the repo and its tests honest (and make
 8. **FIX-34** — `services.yaml` `required`/`depends_on` honoured, deterministic start order
 9. **FIX-38** — workspace service stop/recovery defects
 10. **FIX-40** — default shell/wallpaper commands runnable
-11. **API-02** — secure control socket (0600, peer credentials) with `hello` and `status.get`
+11. **API-03** — reject connections from other UIDs (`SO_PEERCRED`), then `hello` and `status.get`
 12. **OBS-05** — real `i3-nextctl status` talking to the daemon
 
 Next wave (not queued yet): UI-10 first panel (clock + workspaces, UI-01, UI-03), UI-11 launcher (with SEC-03), SVC-07 lock that fails closed, FEAT-01 shell self-heal, SVC-04/SVC-06 audio and battery, FEAT-03/FEAT-04 snapshot save/restore.
@@ -218,7 +218,6 @@ Next wave (not queued yet): UI-10 first panel (clock + workspaces, UI-01, UI-03)
 
 **Open**
 
-- [ ] **API-02** `P0` `sec` — Socket at `$XDG_RUNTIME_DIR/i3-next/i3-next.sock` with `0600`, directory `0700`, `umask` set before `Listen`, stale socket removed only if connecting fails. ✅ permission test.
 - [ ] **API-03** `P0` `sec` — Check `SO_PEERCRED`: only the session owner's UID is accepted. ✅ another UID rejected (second user in the VM).
 - [ ] **API-01** `P0` `docs` — ADR `docs/architecture/adr/0001-rpc.md`: Unix socket + JSON-RPC 2.0 framing.
 - [ ] **API-04** `P0` `feat` — `hello {api_version, client}` handshake; incompatible versions give `version_mismatch` (shown in the UI).
@@ -230,6 +229,10 @@ Next wave (not queued yet): UI-10 first panel (clock + workspaces, UI-01, UI-03)
 - [ ] **API-10** `P1` `docs` — `docs/api/` generated from code plus a `socat` example.
 - [ ] **API-11** `P2` `test` — Golden JSON contract files shared by Go and the QML mock backend.
 - [ ] **API-12** `P2` `sec` — Rate limit sensitive methods (shutdown/launch).
+
+**Done**
+
+- [x] **API-02** `P0` `sec` — control socket `0600` in a `0700` directory, umask set before `Listen`, stale socket removed only if connecting is refused
 
 ### 3.6 Shell UI (Quickshell/QML)
 
@@ -540,6 +543,7 @@ Newest first. One line per merged change that moves a task or the status table.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-11 | API-02 done: `rpc.Listen` creates the control socket `0600` in a `0700` directory with the umask set around `Listen`, and removes a stale socket only when connecting is refused (never a live socket or a non-socket file); fixed `framing.go` declaring `package framing` inside package `rpc`, which broke the build; queue item 11 is now API-03. |
 | 2026-11-09 | CORE-30 marked done: the daemon wiring is complete (`i3-nextd` registers the reconnecting Sway adapter → workspace service → supervised `quickshell`/`swaybg`, honours `enabled` from `services.yaml`, logs `ServiceStateChanged` and every workspace/output/sway event). The remaining defects in the task description are tracked as their own open items (`required`/`depends_on` → FIX-34, workspace stop/recovery → FIX-38, runnable shell/wallpaper commands → FIX-40, e2e false-green → FIX-18, snapshot rebuild/shutdown → SWAY-04). Status table and priority queue refreshed: CORE-30 removed from the queue, FIX-34/FIX-38/FIX-40 promoted. |
 | 2026-11-09 | Static re-review against source: queue re-derived (FIX-19 removed as done); CORE-30 → `[~]` (daemon is wired); FIX-21 → `[~]` (client fixed, tests and adapter bypass missing); SWAY-04 → `[~]` (reconnect exists, snapshot rebuild/shutdown missing); SWAY-03 and CFG-07 reopened; added FIX-33 (Sway IPC numbers wrong), FIX-34, FIX-35, FIX-36 (guest Go), FIX-37, FIX-38, FIX-40 … FIX-44; FIX-23/FIX-24/FIX-18/FIX-25 rewritten from the current code (the `|| true` env claim was stale); Go version wording unified on 1.26.3; release-gate "broken config" line unticked; status table and risks refreshed. |
 | 2026-11-09 | FIX-19 verified green (`gofmt -l .` empty, `go mod tidy` clean, `go.sum` present, dependencies current, `make check` green; `govulncheck` DB unreachable offline 403); FIX-28 docs drift fixed (`kvm.md`→`vm.py`, CHANGELOG `Unreleased`, `finalize-task.md` release-only bumps, `RELEASE_SCOPE.md` "Last updated" removed); FIX-29 API bloat reduced (one name per op, typed options/structs; `serviceShutdownTimeout`/`killService` → `ShutdownTimeouter`/`Killer` interfaces); FIX-32 defaults single-sourced from `internal/core/config/defaults/` (`configs/defaults/` removed). `go build ./... && go test -race ./...` and `make check` green. |
